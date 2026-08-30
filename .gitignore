@@ -1,0 +1,70 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!
+gradlew
+gradlew.bat
+local.properties
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/artifacts/
+.idea/libraries/
+.idea/modules.xml
+.idea/misc.xml
+.idea/caches/
+.idea/httpRequests/
+.idea/externalDependencies/
+.idea/inspectionProfiles/
+
+# Kotlin
+*.class
+*.kotlin_module
+
+# Kotlin Multiplatform
+kotlin-js-store/
+
+# Dokka docs generation
+docs/dist/
+docs/.vitepress/cache/
+docs/content/api/
+docs/.output/
+docs/.nuxt/
+docs/node_modules/
+docs/public/other
+docs/.data
+*/package-lock.json
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+local.properties
+AndroidStudio.local.properties
+
+# Android Studio
+captures/
+.externalNativeBuild/
+customDebugMappings/
+ddmlib/
+.idea/caches/
+.idea/libraries/
+
+**/build/
+
+# OS specific
+.DS_Store
+Thumbs.db
+.kotlin/
+**/xcuserdata/
+gradle-daemon-jvm.properties
