@@ -1,47 +1,32 @@
 # Gradle
 .gradle/
 build/
+**/build/
 !gradle/wrapper/gradle-wrapper.jar
-!
-gradlew
-gradlew.bat
+!gradle/wrapper/gradle-wrapper.properties
 local.properties
-.gradle/
-build/
-!gradle/wrapper/gradle-wrapper.jar
-!
+AndroidStudio.local.properties
+
 # IntelliJ IDEA
 .idea/
 *.iml
 out/
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/gradle.xml
-.idea/artifacts/
-.idea/libraries/
-.idea/modules.xml
-.idea/misc.xml
-.idea/caches/
-.idea/httpRequests/
-.idea/externalDependencies/
-.idea/inspectionProfiles/
 
 # Kotlin
 *.class
 *.kotlin_module
-
-# Kotlin Multiplatform
+.kotlin/
 kotlin-js-store/
 
-# Dokka docs generation
+# Dokka docs generation & Node
 docs/dist/
 docs/.vitepress/cache/
 docs/content/api/
 docs/.output/
 docs/.nuxt/
 docs/node_modules/
-docs/public/other
-docs/.data
+docs/public/other/
+docs/.data/
 */package-lock.json
 
 # Android
@@ -49,22 +34,16 @@ docs/.data
 *.aab
 *.ap_
 *.dex
-local.properties
-AndroidStudio.local.properties
-
-# Android Studio
 captures/
 .externalNativeBuild/
 customDebugMappings/
 ddmlib/
-.idea/caches/
-.idea/libraries/
 
-**/build/
+# Apple / Xcode
+**/xcuserdata/
 
 # OS specific
 .DS_Store
 Thumbs.db
-.kotlin/
-**/xcuserdata/
+gradle/gradle-daemon-jvm.properties
 gradle-daemon-jvm.properties

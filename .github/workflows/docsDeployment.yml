@@ -1,0 +1,49 @@
+name: Deploy Docs to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Set up Nuxt
+        run: |
+          cd docs
+          npm install
+          cd ../
+
+      - name: Build Dokka, Sample, and Docs
+        run: ./gradlew buildDocs
+
+      - name: Deploy to Cloudflare Pages with Wrangler
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.DEPLOYMENT_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler pages deploy ./docs/.output/public/ \
+            --project-name="${{ secrets.NAME }}" \
+            --branch="main"
