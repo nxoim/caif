@@ -2,6 +2,9 @@
 
 package com.nxoim.caif.prefabs.stack
 
+import androidx.collection.MutableScatterMap
+import androidx.collection.MutableScatterSet
+import androidx.collection.mutableScatterMapOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,9 +46,9 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         this.cycleState = StackCycleState(resolver)
         this.externalAnimations = ExternalAnimationRegistry()
         this.lastStackActedUpon = emptyList()
-        this.keysCurrentlyAffectedByCycle = emptySet()
+        this.keysCurrentlyAffectedByCycle = MutableScatterSet()
         this.retainedRenderOrder = emptyList()
-        this.itemCache = mutableMapOf<Key, ItemType>().apply {
+        this.itemCache = mutableScatterMapOf<Key, ItemType>().apply {
             cycleState.stack.current.fastForEach { item ->
                 this[resolver.keyFor(item)] = item
             }
@@ -84,14 +87,13 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
     var lastStackActedUpon: List<ItemType>
         private set
 
-    var activeAnimationJobs by mutableStateOf(emptyMap<Key, Job>())
-        private set
+    private val activeAnimationJobs = mutableScatterMapOf<Key, Job>()
 
-    private var keysCurrentlyAffectedByCycle: Set<Key>
+    private var keysCurrentlyAffectedByCycle: MutableScatterSet<Key>
     private var activeCycleId = 0L
     private var capabilityCycleOpen = false
     private var retainedRenderOrder: List<Key>
-    private val itemCache: MutableMap<Key, ItemType>
+    private val itemCache: MutableScatterMap<Key, ItemType>
 
     var itemsToRender by mutableStateOf(emptyList<Pair<Pair<Key, ItemType>, ItemAnimation<Context>>>())
         private set
@@ -103,8 +105,8 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
 
     internal fun dispose() {
         observationJob.cancel()
-        activeAnimationJobs.values.forEach(Job::cancel)
-        activeAnimationJobs = emptyMap()
+        activeAnimationJobs.forEachValue(Job::cancel)
+        activeAnimationJobs.clear()
         itemsToRender = emptyList()
         externalAnimations.clear()
         registry.clear()
@@ -141,7 +143,7 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
 
         lastStackActedUpon = cycleState.stack.current
 
-        val keysParticipatingInThisCycle = buildSet {
+        val keysParticipatingInThisCycle = MutableScatterSet<Key>().apply {
             stackBeforeCycle.fastForEach { add(resolver.keyFor(it)) }
             cycleState.stack.current.fastForEach { add(resolver.keyFor(it)) }
         }
@@ -174,8 +176,10 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
             previousContexts = cycleState.context.previous,
             currentAnimations = registry.animations
         )
-        val newAffected = affectedItems - invisibleRemoved
-        val removedWithoutNewAnimation = buildSet {
+        val newAffected = MutableScatterSet<Key>(affectedItems.size).apply {
+            affectedItems.forEach { if (it !in invisibleRemoved) add(it) }
+        }
+        val removedWithoutNewAnimation = MutableScatterSet<Key>().apply {
             cycleState.context.current.keys.forEach { key ->
                 if (key !in cycleState.stack.currentKeys && key !in newAffected) add(key)
             }
@@ -183,24 +187,21 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
 
         // items removed without any active or required animation
         // can be removed immediately
-        val immediatelyEvicted = removedWithoutNewAnimation.filterTo(mutableSetOf()) { key ->
-            activeAnimationJobs[key]?.isActive != true
+        val immediatelyEvicted = MutableScatterSet<Key>().apply {
+            removedWithoutNewAnimation.forEach { key ->
+                if (activeAnimationJobs[key]?.isActive != true) add(key)
+            }
         }
 
         // cancel previous running jobs for items moving or reentering
         // in this cycle
         val jobsToCancel = mutableListOf<Job>()
-        val nextJobs = activeAnimationJobs.toMutableMap().apply {
-            immediatelyEvicted.forEach { key ->
-                remove(key)?.let(jobsToCancel::add)
-            }
-            newAffected.forEach { key ->
-                put(key, Job())?.let(jobsToCancel::add)
-            }
+        immediatelyEvicted.forEach { key ->
+            activeAnimationJobs.remove(key)?.let(jobsToCancel::add)
         }
-        // publish replacement ownership before cancellation so
-        // old jobs won't perform stale eviction in finally
-        activeAnimationJobs = nextJobs
+        newAffected.forEach { key ->
+            activeAnimationJobs.put(key, Job())?.let(jobsToCancel::add)
+        }
         jobsToCancel.fastForEach(Job::cancel)
         immediatelyEvicted.forEach { key ->
             registry.evict(key)
@@ -209,7 +210,7 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         updateItemsToRender()
 
         keysCurrentlyAffectedByCycle = newAffected
-        return newAffected
+        return newAffected.asSet()
     }
 
     private fun invisibleRemovedItems(
@@ -217,7 +218,8 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         currentContexts: Map<Key, Context>,
         previousContexts: Map<Key, Context>,
         currentAnimations: Map<Key, ItemAnimation<Context>>
-    ): Set<Key> = buildSet {
+    ): Set<Key> {
+        val result = MutableScatterSet<Key>()
         currentContexts.forEach { (key, currentContext) ->
             if (key !in currentStackKeys) {
                 val animation = currentAnimations[key]
@@ -226,10 +228,11 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
                     !animation.willBeVisible(previousContext) &&
                     !animation.willBeVisible(currentContext)
                 ) {
-                    add(key)
+                    result.add(key)
                 }
             }
         }
+        return result.asSet()
     }
 
     override fun <T : Any> startCycle(
@@ -237,9 +240,11 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
     ): Map<Any, T?> {
         val affected = startCycle(stack.value, capabilityType = kClass)
             .also { capabilityCycleOpen = true }
-        return affected.associateWith { affectedItem ->
-            registry.animations[affectedItem]?.getAndSelectCapability(kClass)
+        val result = MutableScatterMap<Any, T?>(affected.size)
+        affected.forEach { affectedItem ->
+            result[affectedItem] = registry.animations[affectedItem]?.getAndSelectCapability(kClass)
         }
+        return result.asMap()
     }
 
     override val currentCycleId get() = activeCycleId
@@ -284,13 +289,12 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
 
         val jobsToCancel = mutableListOf<Job>()
         val jobsToStart = mutableListOf<Job>()
-        val nextJobs = activeAnimationJobs.toMutableMap()
         affectedKeysSnapshot.forEach { key ->
             val animation = registry.animations[key]
             val currentContext = currentContextsSnapshot[key]
 
             if (animation == null || currentContext == null) {
-                nextJobs.remove(key)?.let(jobsToCancel::add)
+                activeAnimationJobs.remove(key)?.let(jobsToCancel::add)
             } else {
                 val job = scope.launch(start = CoroutineStart.LAZY) {
                     try {
@@ -308,9 +312,7 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
                         if (activeAnimationJobs[key] === ownJob) {
                             // keep items in render tree if they declare themselves visible
                             if (!animation.willBeVisible(currentContext) || !exists) {
-                                activeAnimationJobs = activeAnimationJobs.toMutableMap().apply {
-                                    if (this[key] === ownJob) remove(key)
-                                }
+                                activeAnimationJobs.remove(key)
                                 updateItemsToRender()
                             }
 
@@ -321,12 +323,11 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
                         }
                     }
                 }
-                nextJobs.put(key, job)?.let(jobsToCancel::add)
+                activeAnimationJobs.put(key, job)?.let(jobsToCancel::add)
                 jobsToStart += job
             }
         }
 
-        activeAnimationJobs = nextJobs
         jobsToCancel.fastForEach(Job::cancel)
         jobsToStart.fastForEach(Job::start)
 
@@ -343,14 +344,14 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         }
 
         val currentKeysInOrder = cycleState.stack.currentKeysInOrder
+        val activeKeys = activeAnimationJobs.asMap().keys
         retainedRenderOrder = retainRemovedKeyPositions(
             currentKeys = currentKeysInOrder,
             currentKeySet = cycleState.stack.currentKeys,
             previousOrder = retainedRenderOrder,
-            activeKeys = activeAnimationJobs.keys
+            activeKeys = activeKeys
         )
 
-        val activeKeys = activeAnimationJobs.keys
         val orderedKeys = renderOrder.order(activeKeys, retainedRenderOrder)
         require(orderedKeys.size == activeKeys.size && orderedKeys.toSet() == activeKeys) {
             "RenderOrderStrategy must return every active key exactly once and no other keys."
@@ -385,10 +386,10 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         val result = MutableList<Key?>(currentKeys.size + retained.size) { null }
         val lastIndex = result.lastIndex
         val overflow = mutableListOf<Key>()
-        val previousIndices = HashMap<Key, Int>(previousOrder.size)
+        val previousIndices = MutableScatterMap<Key, Int>(previousOrder.size)
         previousOrder.fastForEachIndexed { index, key -> previousIndices[key] = index }
         retained.fastForEach { key ->
-            val previousIndex = previousIndices.getValue(key)
+            val previousIndex = previousIndices[key]!!
             if (previousIndex <= lastIndex && result[previousIndex] == null) {
                 result[previousIndex] = key
             } else {

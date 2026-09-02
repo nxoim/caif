@@ -89,19 +89,20 @@ abstract class AbstractMutableAnimatedValue<Value, Vector : AnimationVector>(
     protected abstract var snapValue: Value
     private var snapped by mutableStateOf(false)
 
+    /**  Abstract to permit usage of optimized state holders to prevent boxing on velocity updates */
+    protected abstract var velocityState: Value
+    override val velocity: Value get() = velocityState
+
     override var value: Value
         get() = if (snapped) snapValue else animatable.value
         set(newValue) {
             activeJob?.cancel()
             activeJob = null
             generation++
-            _velocity = zeroVelocity
+            velocityState = zeroVelocity
             snapValue = newValue
             snapped = true
         }
-
-    private var _velocity by mutableStateOf(zeroVelocity)
-    override val velocity: Value get() = _velocity
 
     protected open fun hasCrossedTarget(current: Value, target: Value, start: Value): Boolean = false
 
@@ -128,7 +129,7 @@ abstract class AbstractMutableAnimatedValue<Value, Vector : AnimationVector>(
         var crossedTarget = false
         try {
             animatable.animateTo(target, spec, effectiveVelocity) {
-                _velocity = velocity
+                velocityState = velocity
                 if (stopOnTargetReached && hasCrossedTarget(animatable.value, target, startValue)) {
                     crossedTarget = true
                     throw TargetReachedCancellation
@@ -141,7 +142,7 @@ abstract class AbstractMutableAnimatedValue<Value, Vector : AnimationVector>(
                 if (crossedTarget) {
                     animatable.snapTo(target)
                 }
-                _velocity = zeroVelocity
+                velocityState = zeroVelocity
                 if (activeJob === job) activeJob = null
             }
         }
@@ -162,6 +163,7 @@ class GenericMutableAnimatedValue<Value, Vector : AnimationVector>(
     label = label,
 ) {
     override var snapValue by mutableStateOf(zeroVelocity)
+    override var velocityState by mutableStateOf(zeroVelocity)
 }
 
 fun <Value> MutableAnimatedValue<Value>.toAnimatedValue(): AnimatedValue<Value> =

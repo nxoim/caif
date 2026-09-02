@@ -2,6 +2,7 @@
 
 package com.nxoim.caif.prefabs.stack
 
+import androidx.collection.MutableScatterSet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
@@ -88,15 +89,18 @@ fun <Context, ItemType, Key : Any> defaultStackContextResolver(
             recalculateEnteringToMoving: Boolean,
             previousContexts: Map<Key, Context>?
         ): Map<Key, Pair<Context, StackCreationContext<ItemType>>> {
-            val previousKeys = previousStack?.mapTo(HashSet()) { keyFor(it) }
-            val currentKeys = stack.mapTo(HashSet()) { keyFor(it) }
+            val previousKeys = previousStack?.let { list ->
+                MutableScatterSet<Key>(list.size).apply { list.fastForEach { add(keyFor(it)) } }
+            }
+            val currentKeys = MutableScatterSet<Key>(stack.size).apply { stack.fastForEach { add(keyFor(it)) } }
             val itemsByKey = LinkedHashMap<Key, ItemType>(
                 (previousStack?.size ?: 0) + stack.size
             )
             previousStack?.fastForEach { item -> itemsByKey[keyFor(item)] = item }
             stack.fastForEach { item -> itemsByKey[keyFor(item)] = item }
 
-            return itemsByKey.mapValues { (key, item) ->
+            val result = LinkedHashMap<Key, Pair<Context, StackCreationContext<ItemType>>>(itemsByKey.size)
+            itemsByKey.forEach { (key, item) ->
                 val isInPrevious = previousKeys?.contains(key) == true
                 val isInCurrent = key in currentKeys
 
@@ -112,8 +116,9 @@ fun <Context, ItemType, Key : Any> defaultStackContextResolver(
                         previousSnapshot = previousStack,
                         intention = intention
                     )
-                contextFactory.create(creationContext, item) to creationContext
+                result[key] = contextFactory.create(creationContext, item) to creationContext
             }
+            return result
         }
     }
 

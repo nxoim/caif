@@ -2,6 +2,7 @@
 
 package com.nxoim.caif.decompose
 
+import androidx.collection.MutableScatterSet
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.core.ExperimentalTransitionApi
 import androidx.compose.foundation.focusable
@@ -19,9 +20,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.util.fastMapTo
-import com.arkivanov.decompose.Child
+import androidx.compose.ui.util.fastForEach
 import com.arkivanov.decompose.Child.Created
 import com.arkivanov.decompose.router.stack.ChildStack
 import com.arkivanov.decompose.value.Value
@@ -85,7 +84,6 @@ fun <Configuration : Any, Child : Any> DecomposeStack(
         val swipeDispatcher = animator.getOrCreateDispatcher(::SwipeCapabilityDispatcher)
         val predictiveBackDispatcher =
             animator.getOrCreateDispatcher(::PredictiveBackCapabilityDispatcher)
-        val density = LocalDensity.current
         val currentOnPop = rememberUpdatedState(onPop)
 
         val swipeGesture = remember(
@@ -209,8 +207,11 @@ private fun <Child : Any, Configuration : Any> RetainCompositionsEffect(
     }
 }
 
-private fun List<Created<*, *>>.mapKeys(): Set<String> =
-    fastMapTo(HashSet(), Child<*, *>::key)
+private fun List<Created<*, *>>.mapKeys(): Set<String> {
+    val set = MutableScatterSet<String>(size)
+    fastForEach { set.add(it.key) }
+    return set.asSet()
+}
 
 private class Keys(
     var set: Set<String>,
