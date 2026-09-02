@@ -20,6 +20,7 @@ kotlin {
         commonMain.dependencies {
             api(libs.compose.animation)
             api(libs.decompose)
+            api(libs.androidx.collections)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.kotlinx.coroutines.core)

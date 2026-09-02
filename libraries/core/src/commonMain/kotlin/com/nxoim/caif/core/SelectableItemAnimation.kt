@@ -1,5 +1,7 @@
 package com.nxoim.caif.core
 
+import androidx.collection.ScatterMap
+import androidx.collection.mutableScatterMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -51,8 +53,8 @@ fun <Context> buildSelectableItemAnimation(
 
 @AnimationDsl
 class SelectableItemAnimationBuilder<Context> internal constructor() {
-    private val animations = mutableMapOf<AnimationSelector, ItemAnimation<Context>>()
-    private val selectorsByCapability = mutableMapOf<KClass<*>, AnimationSelector>()
+    private val animations = mutableScatterMapOf<AnimationSelector, ItemAnimation<Context>>()
+    private val selectorsByCapability = mutableScatterMapOf<KClass<*>, AnimationSelector>()
     private var declaredDefaultSelector: AnimationSelector? = null
 
     inline fun <reified Capability : Any> selectOnCapability(
@@ -91,15 +93,15 @@ class SelectableItemAnimationBuilder<Context> internal constructor() {
         }
         val defaultSelector = declaredDefaultSelector
             ?: if (animations.size == 1) {
-                animations.keys.first()
+                animations.asMap().keys.first()
             } else {
                 throw IllegalArgumentException(
                     "A selectable item animation with multiple animations must declare a default selector."
                 )
             }
         return SelectableItemAnimationImpl(
-            animations = animations.toMap(),
-            selectorsByCapability = selectorsByCapability.toMap(),
+            animations = animations.asMap(),
+            selectorsByCapability = selectorsByCapability,
             defaultSelector = defaultSelector,
             strategy = strategy
         )
@@ -113,7 +115,7 @@ internal interface SelectableItemAnimation<Context> : ItemAnimation<Context> {
 
 private class SelectableItemAnimationImpl<Context>(
     private val animations: Map<AnimationSelector, ItemAnimation<Context>>,
-    private val selectorsByCapability: Map<KClass<*>, AnimationSelector>,
+    private val selectorsByCapability: ScatterMap<KClass<*>, AnimationSelector>,
     private val defaultSelector: AnimationSelector,
     private val strategy: AnimationSelectorStrategy
 ) : SelectableItemAnimation<Context> {

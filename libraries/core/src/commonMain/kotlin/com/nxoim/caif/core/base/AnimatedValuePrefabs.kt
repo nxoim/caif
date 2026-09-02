@@ -32,6 +32,7 @@ class AnimatedFloat(
     label = label,
 ) {
     override var snapValue by mutableFloatStateOf(initialValue)
+    override var velocityState by mutableFloatStateOf(0f)
 
     override fun hasCrossedTarget(current: Float, target: Float, start: Float) =
         (current - target) * (start - target) <= 0f
@@ -47,6 +48,7 @@ class AnimatedInt(
     label = label,
 ) {
     override var snapValue by mutableIntStateOf(initialValue)
+    override var velocityState by mutableIntStateOf(0)
 
     override fun hasCrossedTarget(current: Int, target: Int, start: Int) =
         (current - target).toLong() * (start - target).toLong() <= 0L
@@ -62,6 +64,7 @@ class AnimatedOffset(
     label = label,
 ) {
     override var snapValue by mutableOffsetStateOf(initialValue)
+    override var velocityState by mutableOffsetStateOf(Offset.Zero)
 
     override fun hasCrossedTarget(current: Offset, target: Offset, start: Offset) =
         (current.x - target.x) * (start.x - target.x) <= 0f &&
@@ -78,6 +81,7 @@ class AnimatedIntOffset(
     label = label,
 ) {
     override var snapValue by mutableIntOffsetStateOf(initialValue)
+    override var velocityState by mutableIntOffsetStateOf(IntOffset.Zero)
 
     override fun hasCrossedTarget(current: IntOffset, target: IntOffset, start: IntOffset) =
         (current.x - target.x).toLong() * (start.x - target.x).toLong() <= 0L &&
@@ -94,6 +98,7 @@ class AnimatedIntSize(
     label = label,
 ) {
     override var snapValue by mutableIntSizeStateOf(initialValue)
+    override var velocityState by mutableIntSizeStateOf(IntSize.Zero)
 
     override fun hasCrossedTarget(current: IntSize, target: IntSize, start: IntSize) =
         (current.width - target.width).toLong() * (start.width - target.width).toLong() <= 0L &&
@@ -109,7 +114,8 @@ class AnimatedSize(
     initialValue = initialValue,
     label = label,
 ) {
-    override var snapValue by  mutableSizeStateOf(initialValue)
+    override var snapValue by mutableSizeStateOf(initialValue)
+    override var velocityState by mutableSizeStateOf(Size.Zero)
 
     override fun hasCrossedTarget(current: Size, target: Size, start: Size) =
         (current.width - target.width) * (start.width - target.width) <= 0f &&
@@ -126,6 +132,7 @@ class AnimatedDp(
     label = label,
 ) {
     override var snapValue by mutableDpStateOf(initialValue)
+    override var velocityState by mutableDpStateOf(0.dp)
 
     override fun hasCrossedTarget(current: Dp, target: Dp, start: Dp) =
         (current - target) * (start - target) <= 0f
@@ -140,7 +147,8 @@ class AnimatedDpOffset(
     initialValue = initialValue,
     label = label,
 ) {
-    override var snapValue by  mutableDpOffsetStateOf(initialValue)
+    override var snapValue by mutableDpOffsetStateOf(initialValue)
+    override var velocityState by mutableDpOffsetStateOf(DpOffset.Zero)
 
     override fun hasCrossedTarget(current: DpOffset, target: DpOffset, start: DpOffset) =
         (current.x - target.x) * (start.x - target.x) <= 0f &&
@@ -158,6 +166,7 @@ class AnimatedColor(
     label = label,
 ) {
     override var snapValue by mutableColorStateOf(initialValue)
+    override var velocityState by mutableColorStateOf(Color.Transparent)
 }
 
 class AnimatedDpSize(
@@ -170,6 +179,7 @@ class AnimatedDpSize(
     label = label,
 ) {
     override var snapValue by mutableDpSizeStateOf(initialValue)
+    override var velocityState by mutableDpSizeStateOf(DpSize.Zero)
 
     override fun hasCrossedTarget(current: DpSize, target: DpSize, start: DpSize) =
         (current.width - target.width) * (start.width - target.width) <= 0f &&

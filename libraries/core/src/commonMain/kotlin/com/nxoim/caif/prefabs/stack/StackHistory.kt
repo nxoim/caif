@@ -1,5 +1,7 @@
 package com.nxoim.caif.prefabs.stack
 
+import androidx.collection.MutableScatterMap
+import androidx.collection.MutableScatterSet
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -41,7 +43,7 @@ class StackHistory<ItemType, Key : Any>(
 
         val currentKeyMap = LinkedHashMap<ItemType, Key>(newStack.size)
         // the set keeps membership O(1), while the list preserves stack order
-        val currentKeys = HashSet<Key>(newStack.size)
+        val currentKeys = MutableScatterSet<Key>(newStack.size)
         val currentKeysInOrder = ArrayList<Key>(newStack.size)
 
         newStack.fastForEach { item ->
@@ -66,7 +68,7 @@ class StackHistory<ItemType, Key : Any>(
             previous = previousStack,
             current = newStack,
             currentKeyMap = currentKeyMap,
-            currentKeys = currentKeys,
+            currentKeys = currentKeys.asSet(),
             currentKeysInOrder = currentKeysInOrder
         )
     }
@@ -241,7 +243,9 @@ class StackCycleState<ItemType, Key : Any, Context, CreationContext>(
         val resolution = settledResolution ?: buildSettledResolution().also {
             settledResolution = it
         }
-        return resolution.mapValues { it.value.first }
+        val map = MutableScatterMap<Key, Context>(resolution.size)
+        resolution.forEach { (key, pair) -> map[key] = pair.first }
+        return map.asMap()
     }
 
     private fun buildSettledResolution() = resolver.buildContexts(

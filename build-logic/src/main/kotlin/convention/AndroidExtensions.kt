@@ -1,9 +1,9 @@
 package convention
 
-import com.android.build.api.dsl.ApplicationExtension
-import com.android.build.api.dsl.LibraryExtension
 import caif.convention.AndroidBuildStuff
 import caif.convention.Constants
+import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.LibraryExtension
 import org.gradle.api.Project
 
 fun ApplicationExtension.setupComposeAndroidApp(
@@ -57,7 +57,7 @@ fun Project.setupAndroidMacrobenchmark(
 
             testInstrumentationRunner = "androidx.benchmark.junit4.AndroidBenchmarkRunner"
             testInstrumentationRunnerArguments["androidx.benchmark.profiling.mode"] =
-                "StackSampling"
+                "MethodTracing"
             testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] =
                 "EMULATOR,LOW-BATTERY"
         }

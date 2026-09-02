@@ -1,13 +1,15 @@
 package com.nxoim.caif.utils
 
+import androidx.collection.MutableScatterMap
+import androidx.collection.mutableScatterMapOf
 import kotlin.jvm.JvmInline
 import kotlin.reflect.KClass
 
 @JvmInline
 value class TypeMap private constructor(
-    private val map: MutableMap<KClass<*>, Any>
+    private val map: MutableScatterMap<KClass<*>, Any>
 ) {
-    constructor() : this(mutableMapOf())
+    constructor() : this(mutableScatterMapOf())
 
     fun <T : Any> put(type: KClass<T>, instance: T) {
         map[type] = instance
