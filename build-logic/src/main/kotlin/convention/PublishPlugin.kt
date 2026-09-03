@@ -24,13 +24,6 @@ class PublishPlugin : Plugin<Project> {
         }
 
         val signingWasSetUp = setupSigning(project)
-        project.configure<SigningExtension> {
-            isRequired = signingWasSetUp
-        }
-        project.tasks.withType<Sign>().configureEach {
-            onlyIf { signingWasSetUp }
-        }
-
         if (signingWasSetUp) {
             loadMavenCredentialsForPublishingOnCentralPlugin(project)
         } else {
