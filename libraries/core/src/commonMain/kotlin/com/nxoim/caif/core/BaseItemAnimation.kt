@@ -35,13 +35,14 @@ abstract class BaseItemAnimation<Context> : ItemAnimation<Context>, AnimationBui
         customAnimateTo = block
     }
 
-    override fun reset(context: Context) {
+    final override fun reset(context: Context) {
         registeredValues.fastForEach { it.snapToTarget(context) }
         registeredChildren.fastForEach { it.reset(context) }
     }
 
-    override suspend fun animateTo(target: Context) {
+    final override suspend fun animateTo(target: Context) {
         val custom = customAnimateTo
+
         if (custom != null) {
             target.custom()
         } else if (registeredValues.isNotEmpty() || registeredChildren.isNotEmpty()) {
@@ -49,11 +50,13 @@ abstract class BaseItemAnimation<Context> : ItemAnimation<Context>, AnimationBui
                 registeredValues.fastForEach { value ->
                     launch { value.animateTo(target) }
                 }
+
                 registeredChildren.fastForEach { child ->
                     launch { child.animateTo(target) }
                 }
             }
         }
+
         if (!willBeVisible(target)) {
             reset(target)
         }
@@ -62,7 +65,7 @@ abstract class BaseItemAnimation<Context> : ItemAnimation<Context>, AnimationBui
     override fun willBeVisible(context: Context): Boolean = true
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T : Any> getAndSelectCapability(kClass: KClass<T>): T? {
+    final override fun <T : Any> getAndSelectCapability(kClass: KClass<T>): T? {
         if (kClass.isInstance(this)) return this as T
         registeredChildren.fastForEach { child ->
             val capability = child.getAndSelectCapability(kClass)
