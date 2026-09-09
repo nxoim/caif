@@ -82,6 +82,7 @@ fun <Configuration : Any, Child : Any> DecomposeStack(
             },
             renderOrder = remember { RenderOrderStrategy.byStackIndex() },
         )
+
         val swipeDispatcher = animator.getOrCreateDispatcher(::SwipeCapabilityDispatcher)
         val predictiveBackDispatcher =
             animator.getOrCreateDispatcher(::PredictiveBackCapabilityDispatcher)

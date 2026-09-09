@@ -62,7 +62,9 @@ abstract class BaseItemAnimation<Context> : ItemAnimation<Context>, AnimationBui
         }
     }
 
-    override fun willBeVisible(context: Context): Boolean = true
+    open fun Context.isVisibleWhen(): Boolean = true
+
+    final override fun willBeVisible(context: Context): Boolean = with(context) { isVisibleWhen() }
 
     @Suppress("UNCHECKED_CAST")
     final override fun <T : Any> getAndSelectCapability(kClass: KClass<T>): T? {

@@ -106,8 +106,8 @@ internal class CardStackItemAnimation : StabilizedItemAnimation<CardContext>(), 
             this.alpha = animatedAlpha.value
         }
 
-    override fun willBeVisible(context: CardContext): Boolean =
-        context.position == CardContext.Position.Inside && context.depth < 6
+    override fun CardContext.isVisibleWhen(): Boolean =
+        position == CardContext.Position.Inside && depth < 6
 
     context(density: Density)
     override fun onSwipeUpdate(delta: Offset) {

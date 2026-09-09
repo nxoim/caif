@@ -8,7 +8,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.round
 import com.arkivanov.essenty.backhandler.BackEvent
@@ -23,7 +22,6 @@ import com.nxoim.caif.prefabs.stack.isTopmost
 import com.nxoim.caif.springs.smooth
 import com.nxoim.caif.springs.springA
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
@@ -85,8 +83,7 @@ class CupertinoStackAnimation(
             }
         }
 
-    override fun willBeVisible(context: StackAnimationContext): Boolean =
-        context.position.isTopmost
+    override fun StackAnimationContext.isVisibleWhen() = position.isTopmost
 
     context(density: Density)
     override fun onSwipeUpdate(delta: Offset) {
@@ -168,8 +165,7 @@ class MaterialStackAnimation : BaseItemAnimation<StackAnimationContext>(), Predi
             }
         }
 
-    override fun willBeVisible(context: StackAnimationContext): Boolean =
-        context.position.isTopmost
+    override fun StackAnimationContext.isVisibleWhen() = position.isTopmost
 
     override fun onStart(
         progress: Float,

@@ -60,8 +60,8 @@ class ExpansionSwipeStackAnimation(
             }
         }
 
-    override fun willBeVisible(context: StackAnimationContext): Boolean =
-        context.position.isTopmost
+    override fun StackAnimationContext.isVisibleWhen(): Boolean = position.isTopmost
+
 
     context(density: Density)
     override fun onSwipeUpdate(delta: Offset) {
