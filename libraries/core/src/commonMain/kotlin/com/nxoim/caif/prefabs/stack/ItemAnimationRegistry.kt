@@ -15,6 +15,8 @@ class ItemAnimationRegistry<ItemType, Key : Any, Context>(
             .apply { putAll(_animations) }
             .asMap()
 
+    internal fun get(key: Key): ItemAnimation<Context>? = _animations[key]
+
     fun getOrCreate(item: ItemType, key: Key, initialContext: () -> Context): ItemAnimation<Context> =
         _animations.getOrPut(key) {
             factory.create(item, key).apply { reset(initialContext()) }

@@ -49,8 +49,8 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         this.keysCurrentlyAffectedByCycle = MutableScatterSet()
         this.retainedRenderOrder = emptyList()
         this.itemCache = mutableScatterMapOf<Key, ItemType>().apply {
-            cycleState.stack.current.fastForEach { item ->
-                this[resolver.keyFor(item)] = item
+            cycleState.stack.currentKeyMap.forEach { (item, key) ->
+                this[key] = item
             }
         }
         this.observationJob = scope.launch {
@@ -126,6 +126,8 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         capabilityType: KClass<*>?
     ): Set<Key> {
         val stackBeforeCycle = cycleState.stack.current
+        val keysBeforeCycle = cycleState.stack.currentKeys
+        val itemsAndKeysBeforeCycle = cycleState.stack.currentKeyMap
         capabilityCycleOpen = false
         activeCycleId++
         // prepare new entering items as PreEntered on Frame 0
@@ -135,17 +137,25 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
             recalculateEnteringToMoving = false
         )
         stackBeforeCycle.fastForEach { item ->
-            itemCache[resolver.keyFor(item)] = item
+            val key = itemsAndKeysBeforeCycle[item]
+                ?: error("No key for item before cycle item cache building")
+            itemCache[key] = item
         }
-        cycleState.stack.current.fastForEach { item ->
-            itemCache[resolver.keyFor(item)] = item
+        val currentStack = cycleState.stack.current
+        val currentItemsAndKeys = cycleState.stack.currentKeyMap
+        currentStack.fastForEach { item ->
+            val key = currentItemsAndKeys[item]
+                ?: error("No key for item during item cache building")
+            itemCache[key] = item
         }
 
         lastStackActedUpon = cycleState.stack.current
 
-        val keysParticipatingInThisCycle = MutableScatterSet<Key>().apply {
-            stackBeforeCycle.fastForEach { add(resolver.keyFor(it)) }
-            cycleState.stack.current.fastForEach { add(resolver.keyFor(it)) }
+        val keysParticipatingInThisCycle = MutableScatterSet<Key>(
+            keysBeforeCycle.size + cycleState.stack.currentKeys.size
+        ).apply {
+            keysBeforeCycle.forEach(::add)
+            cycleState.stack.currentKeys.forEach(::add)
         }
 
         fun animationFor(key: Key): ItemAnimation<Context> =
@@ -242,7 +252,7 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
             .also { capabilityCycleOpen = true }
         val result = MutableScatterMap<Any, T?>(affected.size)
         affected.forEach { affectedItem ->
-            result[affectedItem] = registry.animations[affectedItem]?.getAndSelectCapability(kClass)
+            result[affectedItem] = registry.get(affectedItem)?.getAndSelectCapability(kClass)
         }
         return result.asMap()
     }
@@ -290,7 +300,7 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         val jobsToCancel = mutableListOf<Job>()
         val jobsToStart = mutableListOf<Job>()
         affectedKeysSnapshot.forEach { key ->
-            val animation = registry.animations[key]
+            val animation = registry.get(key)
             val currentContext = currentContextsSnapshot[key]
 
             if (animation == null || currentContext == null) {
@@ -353,12 +363,12 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         )
 
         val orderedKeys = renderOrder.order(activeKeys, retainedRenderOrder)
-        require(orderedKeys.size == activeKeys.size && orderedKeys.toSet() == activeKeys) {
+        require(orderedKeys.containsExactly(activeKeys)) {
             "RenderOrderStrategy must return every active key exactly once and no other keys."
         }
         itemsToRender = orderedKeys.fastMap { key ->
             val item = itemCache[key]!!
-            val animation = registry.animations[key]!!
+            val animation = registry.get(key)!!
             (key to item) to animation
         }
     }
@@ -407,6 +417,18 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext> : StackCy
         val currentIterator = currentKeys.iterator()
         return result.fastMap { it ?: currentIterator.next() }
     }
+}
+
+private fun <Key : Any> List<Key>.containsExactly(activeKeys: Set<Key>): Boolean {
+    if (size != activeKeys.size) return false
+
+    val remainingKeys = MutableScatterSet<Key>(activeKeys.size).apply {
+        activeKeys.forEach(::add)
+    }
+    fastForEach { key ->
+        if (!remainingKeys.remove(key)) return false
+    }
+    return remainingKeys.size == 0
 }
 
 @Suppress("UNCHECKED_CAST")
