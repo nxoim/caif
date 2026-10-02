@@ -23,35 +23,197 @@ interface MutableAnimatedValue<Value> : AnimatedValue<Value> {
         target: Value,
         spec: AnimationSpec<Value> = spring(),
         initialVelocity: Value = velocity,
-        stopOnTargetReached: Boolean = false
+        stopOnTargetReached: Boolean = false,
     )
 }
 
+abstract class AbstractMutableAnimatedValue<Value, Vector : AnimationVector>(
+    converter: TwoWayConverter<Value, Vector>,
+    protected val zeroVelocity: Value,
+    initialValue: Value,
+    private val label: String = "AnimatedValue",
+) : MutableAnimatedValue<Value> {
+    protected val animatable = Animatable(initialValue, converter, label = label)
+    private var activeJob: Job? = null
+    private var generation = 0
+
+    protected var snapped by mutableStateOf(false)
+        private set
+
+    protected fun beginDirectWrite() {
+        activeJob?.cancel()
+        activeJob = null
+        generation++
+    }
+
+    protected fun finishDirectWrite() {
+        snapped = true
+    }
+
+    protected abstract suspend fun syncSnapStateToAnimatable()
+
+    protected abstract fun updateVelocityState(value: Value)
+
+    protected abstract fun clearVelocityState()
+
+    protected open fun hasCrossedTarget(
+        current: Value,
+        target: Value,
+        start: Value,
+    ): Boolean = false
+
+    final override suspend fun animateTo(
+        target: Value,
+        spec: AnimationSpec<Value>,
+        initialVelocity: Value,
+        stopOnTargetReached: Boolean
+    ) {
+        activeJob?.cancel()
+
+        val job = currentCoroutineContext()[Job]
+        activeJob = job
+
+        val gen = ++generation
+
+        if (snapped) {
+            syncSnapStateToAnimatable()
+            snapped = false
+        }
+
+        val startValue = animatable.value
+
+        val effectiveVelocity = if (initialVelocity != zeroVelocity) {
+            initialVelocity
+        } else {
+            animatable.velocity
+        }
+
+        var crossedTarget = false
+
+        try {
+            animatable.animateTo(
+                targetValue = target,
+                animationSpec = spec,
+                initialVelocity = effectiveVelocity,
+            ) {
+                updateVelocityState(velocity)
+
+                if (
+                    stopOnTargetReached &&
+                    hasCrossedTarget(
+                        current = animatable.value,
+                        target = target,
+                        start = startValue
+                    )
+                ) {
+                    crossedTarget = true
+                    throw TargetReachedCancellation
+                }
+            }
+        } catch (cancellation: CancellationException) {
+            if (cancellation !== TargetReachedCancellation) throw cancellation
+        } finally {
+            if (gen == generation) {
+                if (crossedTarget) animatable.snapTo(target)
+
+                clearVelocityState()
+
+                if (activeJob === job) activeJob = null
+            }
+        }
+    }
+}
+
+class GenericMutableAnimatedValue<Value, Vector : AnimationVector>(
+    converter: TwoWayConverter<Value, Vector>,
+    zeroVelocity: Value,
+    initialValue: Value,
+    label: String,
+) : AbstractMutableAnimatedValue<Value, Vector>(
+    converter = converter,
+    zeroVelocity = zeroVelocity,
+    initialValue = initialValue,
+    label = label,
+) {
+    private val snapState = mutableStateOf(initialValue)
+    private val velocityState = mutableStateOf(zeroVelocity)
+
+    constructor(
+        converter: TwoWayConverter<Value, Vector>,
+        zeroVelocity: Value,
+        initialValue: () -> Value,
+        label: String = "AnimatedValue",
+    ) : this(
+        converter = converter,
+        zeroVelocity = zeroVelocity,
+        initialValue = initialValue(),
+        label = label,
+    )
+
+    override var value: Value
+        get() =
+            if (snapped) {
+                snapState.value
+            } else {
+                animatable.value
+            }
+        set(newValue) {
+            beginDirectWrite()
+
+            velocityState.value = zeroVelocity
+            snapState.value = newValue
+
+            finishDirectWrite()
+        }
+
+    override val velocity: Value
+        get() = velocityState.value
+
+    override suspend fun syncSnapStateToAnimatable() {
+        animatable.snapTo(snapState.value)
+    }
+
+    override fun updateVelocityState(value: Value) {
+        velocityState.value = value
+    }
+
+    override fun clearVelocityState() {
+        velocityState.value = zeroVelocity
+    }
+}
+
+
 interface TargetableMutableAnimatedValue<Value, Context> : AnimatedValue<Value> {
     override var value: Value
+
     fun snapToTarget(target: Context)
+
     fun prepareVelocity(new: Value)
+
     suspend fun animateTo(target: Context)
 }
 
-fun <Value, Vector : AnimationVector, Context> TargetableMutableAnimatedValue(
-    base: AbstractMutableAnimatedValue<Value, Vector>,
+fun <Value, Context> TargetableMutableAnimatedValue(
+    base: MutableAnimatedValue<Value>,
     valueMapper: Context.() -> Value,
     specFactory: Context.() -> AnimationSpec<Value>,
-    stopOnTargetReached: (Context.() -> Boolean)? = null
+    stopOnTargetReached: (Context.() -> Boolean)? = null,
 ): TargetableMutableAnimatedValue<Value, Context> =
     object : TargetableMutableAnimatedValue<Value, Context> {
-        override var value
+
+        private var preparedVelocity: Value? = null
+
+        override var value: Value
             get() = base.value
             set(newValue) {
                 base.value = newValue
                 preparedVelocity = null
             }
 
-        override val velocity get() = base.velocity
-        var preparedVelocity: Value? = null
+        override val velocity: Value
+            get() = base.velocity
 
-        override fun snapToTarget(target: Context)  {
+        override fun snapToTarget(target: Context) {
             base.value = valueMapper(target)
             preparedVelocity = null
         }
@@ -63,115 +225,33 @@ fun <Value, Vector : AnimationVector, Context> TargetableMutableAnimatedValue(
         override suspend fun animateTo(target: Context) {
             val actualTarget = valueMapper(target)
             val spec = specFactory(target)
-            val velocity = preparedVelocity ?: velocity
+            val initialVelocity = preparedVelocity ?: velocity
             val stop = stopOnTargetReached?.invoke(target) ?: false
+
             preparedVelocity = null
-            base.animateTo(actualTarget, spec, velocity, stop)
+
+            base.animateTo(
+                target = actualTarget,
+                spec = spec,
+                initialVelocity = initialVelocity,
+                stopOnTargetReached = stop,
+            )
         }
     }
 
-/**
- * Exists to mitigate Animatable's limitations regarding
- * animating and snapping. The mitigations are based on manual
- * management of publicly exposed state.
- */
-abstract class AbstractMutableAnimatedValue<Value, Vector : AnimationVector>(
-    private val converter: TwoWayConverter<Value, Vector>,
-    private val zeroVelocity: Value,
-    initialValue: Value,
-    private val label: String = "AnimatedValue",
-) : MutableAnimatedValue<Value> {
-    private val animatable = Animatable(initialValue, converter, label = label)
-    private var activeJob: Job? = null
-    private var generation = 0
-
-    /**  Abstract to permit usage of optimized state holders to prevent boxing on snap */
-    protected abstract var snapValue: Value
-    private var snapped by mutableStateOf(false)
-
-    override var value: Value
-        get() = if (snapped) snapValue else animatable.value
-        set(newValue) {
-            activeJob?.cancel()
-            activeJob = null
-            generation++
-            _velocity = zeroVelocity
-            snapValue = newValue
-            snapped = true
-        }
-
-    private var _velocity by mutableStateOf(zeroVelocity)
-    override val velocity: Value get() = _velocity
-
-    protected open fun hasCrossedTarget(current: Value, target: Value, start: Value): Boolean = false
-
-    override suspend fun animateTo(
-        target: Value,
-        spec: AnimationSpec<Value>,
-        initialVelocity: Value,
-        stopOnTargetReached: Boolean
-    ) {
-        activeJob?.cancel()
-        val job = currentCoroutineContext()[Job]
-        activeJob = job
-        val gen = ++generation
-
-        // sync
-        if (snapped) {
-            animatable.snapTo(snapValue)
-            snapped = false
-        }
-
-        val startValue = animatable.value
-        val effectiveVelocity = if (initialVelocity != zeroVelocity) initialVelocity else animatable.velocity
-
-        var crossedTarget = false
-        try {
-            animatable.animateTo(target, spec, effectiveVelocity) {
-                _velocity = velocity
-                if (stopOnTargetReached && hasCrossedTarget(animatable.value, target, startValue)) {
-                    crossedTarget = true
-                    throw TargetReachedCancellation
-                }
-            }
-        } catch (cancellation: CancellationException) {
-            if (cancellation !== TargetReachedCancellation) throw cancellation
-        } finally {
-            if (gen == generation) {
-                if (crossedTarget) {
-                    animatable.snapTo(target)
-                }
-                _velocity = zeroVelocity
-                if (activeJob === job) activeJob = null
-            }
-        }
-    }
-}
-
-private object TargetReachedCancellation : CancellationException("Crossed target")
-
-class GenericMutableAnimatedValue<Value, Vector : AnimationVector>(
-    converter: TwoWayConverter<Value, Vector>,
-    zeroVelocity: Value,
-    initialValue: () -> Value,
-    label: String = "AnimatedValue",
-) : AbstractMutableAnimatedValue<Value, Vector>(
-    converter,
-    zeroVelocity,
-    initialValue = initialValue(),
-    label = label,
-) {
-    override var snapValue by mutableStateOf(zeroVelocity)
-}
 
 fun <Value> MutableAnimatedValue<Value>.toAnimatedValue(): AnimatedValue<Value> =
     object : AnimatedValue<Value> {
         override val value get() = this@toAnimatedValue.value
+
         override val velocity get() = this@toAnimatedValue.velocity
     }
 
 fun <Value, Context> TargetableMutableAnimatedValue<Value, Context>.toAnimatedValue(): AnimatedValue<Value> =
     object : AnimatedValue<Value> {
-        override val value get() = this@toAnimatedValue.value
+        override val value  get() = this@toAnimatedValue.value
+
         override val velocity get() = this@toAnimatedValue.velocity
     }
+
+private object TargetReachedCancellation : CancellationException("Crossed target")

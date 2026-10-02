@@ -1,5 +1,9 @@
 package com.nxoim.caif.prefabs.list
 
+import androidx.collection.MutableOrderedScatterSet
+import androidx.collection.MutableScatterMap
+import androidx.collection.MutableScatterSet
+import androidx.collection.mutableScatterMapOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateMapOf
@@ -7,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.util.fastForEachIndexed
 import com.nxoim.caif.core.ItemAnimation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -56,8 +62,8 @@ class CollectionSwipeAnimator<Key : Any, Context>(
     private val visibleKeys: () -> List<Key>,
 ) {
     private val settleables = mutableStateMapOf<Key, ItemAnimation<Context>>()
-    private val lastAnimationTargets = mutableMapOf<Key, CollectionItemPosition>()
-    private val animationJobs = mutableMapOf<Key, Job>()
+    private val lastAnimationTargets = mutableScatterMapOf<Key, CollectionItemPosition>()
+    private val animationJobs = mutableScatterMapOf<Key, Job>()
     private var activeGesture: ActiveGesture<Key>? = null
 
     fun onStart(key: Key) {
@@ -67,10 +73,17 @@ class CollectionSwipeAnimator<Key : Any, Context>(
         }
         val interruptedGesture = activeGesture // capture before overwriting
 
+        val indices = MutableScatterMap<Key, Int>(visibleSnapshot.size)
+        visibleSnapshot.fastForEachIndexed { index, k -> indices[k] = index }
+
+        val trackedKeys = MutableOrderedScatterSet<Key>(visibleSnapshot.size).apply {
+            visibleSnapshot.fastForEach(::add)
+        }
+
         activeGesture = ActiveGesture(
             startedKey = key,
-            indices = visibleSnapshot.withIndex().associate { it.value to it.index },
-            trackedKeys = visibleSnapshot.toMutableList()
+            indices = indices,
+            trackedKeys = trackedKeys
         )
 
         syncVisibleItems(visibleSnapshot, interruptedGesture)
@@ -86,13 +99,13 @@ class CollectionSwipeAnimator<Key : Any, Context>(
         val gesture = activeGesture ?: return emptyMap()
         val startedIndex = gesture.indices[gesture.startedKey] ?: -1
 
-        return buildMap(gesture.trackedKeys.size) {
-            gesture.trackedKeys.forEach { key ->
-                val distance = distanceFrom(startedIndex, gesture.indices[key] ?: -1)
-                val capability = settleables[key]?.getAndSelectCapability(capabilityType)
-                put(key, capability to distance)
-            }
+        val result = LinkedHashMap<Key, Pair<T?, Int>>(gesture.trackedKeys.size)
+        gesture.trackedKeys.forEach { key ->
+            val distance = distanceFrom(startedIndex, gesture.indices[key] ?: -1)
+            val capability = settleables[key]?.getAndSelectCapability(capabilityType)
+            result[key] = capability to distance
         }
+        return result
     }
 
     /**
@@ -156,9 +169,15 @@ class CollectionSwipeAnimator<Key : Any, Context>(
     }
 
     private fun syncVisibleItems(visible: List<Key>, interruptedGesture: ActiveGesture<Key>?) {
-        val stillMidDrag = interruptedGesture?.trackedKeys.orEmpty().toSet()
-        val newGestureKeys = activeGesture?.trackedKeys.orEmpty().toSet()
-        val visibleSet = visible.toSet()
+        val stillMidDrag = MutableScatterSet<Key>().apply {
+            interruptedGesture?.trackedKeys?.forEach { add(it) }
+        }
+        val newGestureKeys = MutableScatterSet<Key>().apply {
+            activeGesture?.trackedKeys?.forEach { add(it) }
+        }
+        val visibleSet = MutableScatterSet<Key>(visible.size).apply {
+            visible.fastForEach(::add)
+        }
 
         visible.forEachIndexed { index, key ->
             val isGestureAlreadyOwned = key in stillMidDrag && key in settleables
@@ -171,18 +190,22 @@ class CollectionSwipeAnimator<Key : Any, Context>(
             )
         }
 
-        val stale = settleables.keys - visibleSet - newGestureKeys
-        stale.forEach { key ->
-            animationJobs[key]?.cancel()
-            animationJobs -= key
-            settleables -= key
-            lastAnimationTargets -= key
+        val keysToRemove = MutableScatterSet<Key>()
+        settleables.keys.forEach { key ->
+            if (key !in visibleSet && key !in newGestureKeys) {
+                keysToRemove.add(key)
+            }
+        }
+        keysToRemove.forEach { key ->
+            animationJobs.remove(key)?.cancel()
+            settleables.remove(key)
+            lastAnimationTargets.remove(key)
         }
     }
 
     private fun getOrCreateSettleable(
         key: Key,
-        knownPosition: com.nxoim.caif.prefabs.list.CollectionItemPosition? = null
+        knownPosition: CollectionItemPosition? = null
     ): ItemAnimation<Context> =
         settleables.getOrPut(key) {
             val initialPosition = knownPosition ?: CollectionItemPosition(
@@ -214,7 +237,7 @@ class CollectionSwipeAnimator<Key : Any, Context>(
     }
 
     internal fun dispose() {
-        animationJobs.values.forEach(Job::cancel)
+        animationJobs.forEach { _, job -> job.cancel() }
         animationJobs.clear()
         settleables.clear()
         lastAnimationTargets.clear()
@@ -223,8 +246,8 @@ class CollectionSwipeAnimator<Key : Any, Context>(
 
     private data class ActiveGesture<Key : Any>(
         val startedKey: Key,
-        val indices: Map<Key, Int>,
-        val trackedKeys: MutableList<Key>
+        val indices: MutableScatterMap<Key, Int>,
+        val trackedKeys: MutableOrderedScatterSet<Key>
     )
 }
 

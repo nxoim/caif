@@ -2,6 +2,7 @@
 
 package com.nxoim.caif.prefabs.stack
 
+import androidx.collection.MutableScatterSet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
@@ -88,15 +89,25 @@ fun <Context, ItemType, Key : Any> defaultStackContextResolver(
             recalculateEnteringToMoving: Boolean,
             previousContexts: Map<Key, Context>?
         ): Map<Key, Pair<Context, StackCreationContext<ItemType>>> {
-            val previousKeys = previousStack?.mapTo(HashSet()) { keyFor(it) }
-            val currentKeys = stack.mapTo(HashSet()) { keyFor(it) }
+            val previousKeys = previousStack?.let { MutableScatterSet<Key>(it.size) }
+            val currentKeys = MutableScatterSet<Key>(stack.size)
             val itemsByKey = LinkedHashMap<Key, ItemType>(
                 (previousStack?.size ?: 0) + stack.size
             )
-            previousStack?.fastForEach { item -> itemsByKey[keyFor(item)] = item }
-            stack.fastForEach { item -> itemsByKey[keyFor(item)] = item }
+            previousStack?.fastForEach { item ->
+                val key = keyFor(item)
+                previousKeys?.add(key)
+                itemsByKey[key] = item
+            }
+            stack.fastForEach { item ->
+                val key = keyFor(item)
+                currentKeys.add(key)
+                itemsByKey[key] = item
+            }
 
-            return itemsByKey.mapValues { (key, item) ->
+            val indexLookup = StackCreationContextIndexLookup(stack, previousStack)
+            val result = LinkedHashMap<Key, Pair<Context, StackCreationContext<ItemType>>>(itemsByKey.size)
+            itemsByKey.forEach { (key, item) ->
                 val isInPrevious = previousKeys?.contains(key) == true
                 val isInCurrent = key in currentKeys
 
@@ -106,14 +117,14 @@ fun <Context, ItemType, Key : Any> defaultStackContextResolver(
                     else -> AppearanceIntention.Movement
                 }
 
-                val creationContext =
-                    StackCreationContext(
-                        stackSnapshot = stack,
-                        previousSnapshot = previousStack,
-                        intention = intention
-                    )
-                contextFactory.create(creationContext, item) to creationContext
+                val creationContext = StackCreationContext(
+                    stackSnapshot = stack,
+                    previousSnapshot = previousStack,
+                    intention = intention
+                ).apply { installIndexLookup(indexLookup) }
+                result[key] = contextFactory.create(creationContext, item) to creationContext
             }
+            return result
         }
     }
 

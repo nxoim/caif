@@ -24,6 +24,10 @@ class StackHistory<ItemType, Key : Any>(
     internal val currentKeys get() = state.currentKeys
     internal val currentKeysInOrder get() = state.currentKeysInOrder
 
+    /**
+     * Retains [newStack] by reference.
+     * Callers are expected not mutate it after pushing.
+     */
     fun push(newStack: List<ItemType>) {
         val previousStack = state.current
         if (previousStack == newStack) return

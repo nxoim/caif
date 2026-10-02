@@ -6,6 +6,7 @@ include(":libraries:core")
 include(":libraries:decompose-extensions")
 include(":sample:shared")
 include(":sample:android")
+include(":benchmarks")
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

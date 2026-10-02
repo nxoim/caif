@@ -1,5 +1,6 @@
 package com.nxoim.caif.prefabs.stack
 
+import androidx.collection.MutableScatterSet
 import androidx.collection.mutableOrderedScatterSetOf
 
 /** Selects the stack keys that participate in the next animation cycle. */
@@ -68,13 +69,19 @@ private class CreateFromTopPolicy(private val reversed: Boolean) : AffectedItems
             total.add(key)
         }
 
-        for ((key, _) in currentContexts) {
-            if (total.size >= maxAffected) break
-            if (key !in keys.values) {
-                val wasVisible = previousContexts[key]
-                    ?.let { isVisible(key, it) }
-                    ?: false
-                if (wasVisible) total.add(key)
+        if (total.size < maxAffected && currentContexts.isNotEmpty()) {
+            val stackKeys = MutableScatterSet<Any>(keys.size).apply {
+                keys.values.forEach(::add)
+            }
+
+            for ((key, _) in currentContexts) {
+                if (total.size >= maxAffected) break
+                if (key !in stackKeys) {
+                    val wasVisible = previousContexts[key]
+                        ?.let { isVisible(key, it) }
+                        ?: false
+                    if (wasVisible) total.add(key)
+                }
             }
         }
 

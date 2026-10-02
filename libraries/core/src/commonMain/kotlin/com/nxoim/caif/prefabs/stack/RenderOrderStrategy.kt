@@ -1,6 +1,6 @@
 package com.nxoim.caif.prefabs.stack
 
-import androidx.compose.runtime.annotation.RememberInComposition
+import androidx.collection.MutableScatterSet
 import androidx.compose.ui.util.fastForEach
 
 /**
@@ -14,7 +14,9 @@ fun interface RenderOrderStrategy<Key : Any> {
         private val InsertionStrategy = RenderOrderStrategy<Any> { active, _ -> active.toList() }
 
         private val ByStackIndexStrategyInstance = RenderOrderStrategy<Any> { active, stackOrder ->
-            val remaining = active.toMutableSet()
+            val remaining = MutableScatterSet<Any>(active.size).apply {
+                active.forEach { add(it) }
+            }
             buildList(active.size) {
                 stackOrder.asReversed().fastForEach { key ->
                     if (remaining.remove(key)) add(key)
@@ -26,12 +28,10 @@ fun interface RenderOrderStrategy<Key : Any> {
         }
 
         @Suppress("UNCHECKED_CAST")
-        @RememberInComposition
         fun <Key : Any> insertionOrder(): RenderOrderStrategy<Key> =
             InsertionStrategy as RenderOrderStrategy<Key>
 
         @Suppress("UNCHECKED_CAST")
-        @RememberInComposition
         fun <Key : Any> byStackIndex(): RenderOrderStrategy<Key> =
             ByStackIndexStrategyInstance as RenderOrderStrategy<Key>
     }

@@ -30,6 +30,20 @@ import kotlin.reflect.KProperty
 
 fun mutableDpStateOf(value: Dp): MutableDpState = MutableDpStateImpl(value)
 
+inline operator fun DpState.getValue(
+    thisObj: Any?,
+    property: KProperty<*>
+): Dp = value
+
+inline operator fun MutableDpState.setValue(
+    thisObj: Any?,
+    property: KProperty<*>,
+    value: Dp
+) {
+    this.value = value
+}
+
+
 @Stable
 interface DpState : State<Dp> {
     override val value: Dp
@@ -62,6 +76,20 @@ fun mutableOffsetStateOf(value: Offset): MutableOffsetState = MutableOffsetState
 @JvmName("mutableOffsetStateOfXy")
 fun mutableOffsetStateOf(x: Float, y: Float): MutableOffsetState = MutableOffsetStateImpl(Offset(x, y))
 
+
+inline operator fun OffsetState.getValue(
+    thisObj: Any?,
+    property: KProperty<*>
+): Offset = value
+
+inline operator fun MutableOffsetState.setValue(
+    thisObj: Any?,
+    property: KProperty<*>,
+    value: Offset
+) {
+    this.value = value
+}
+
 @Stable
 interface OffsetState : State<Offset> {
     override val value: Offset
@@ -93,6 +121,19 @@ private value class MutableOffsetStateImpl(
 fun mutableSizeStateOf(value: Size): MutableSizeState = MutableSizeStateImpl(value)
 @JvmName("mutableSizeStateOfWh")
 fun mutableSizeStateOf(width: Float, height: Float): MutableSizeState = MutableSizeStateImpl(Size(width, height))
+
+inline operator fun SizeState.getValue(
+    thisObj: Any?,
+    property: KProperty<*>
+): Size = value
+
+inline operator fun MutableSizeState.setValue(
+    thisObj: Any?,
+    property: KProperty<*>,
+    value: Size
+) {
+    this.value = value
+}
 
 @Stable
 interface SizeState : State<Size> {
@@ -127,6 +168,19 @@ fun mutableIntOffsetStateOf(value: IntOffset): MutableIntOffsetState = MutableIn
 @JvmName("mutableIntOffsetStateOfXy")
 fun mutableIntOffsetStateOf(x: Int, y: Int): MutableIntOffsetState = MutableIntOffsetStateImpl(IntOffset(x, y))
 
+inline operator fun IntOffsetState.getValue(
+    thisObj: Any?,
+    property: KProperty<*>
+): IntOffset = value
+
+inline operator fun MutableIntOffsetState.setValue(
+    thisObj: Any?,
+    property: KProperty<*>,
+    value: IntOffset
+) {
+    this.value = value
+}
+
 @Stable
 interface IntOffsetState : State<IntOffset> {
     override val value: IntOffset
@@ -158,6 +212,19 @@ private value class MutableIntOffsetStateImpl(
 fun mutableDpOffsetStateOf(value: DpOffset): MutableDpOffsetState = MutableDpOffsetStateImpl(value)
 @JvmName("mutableDpOffsetStateOfXy")
 fun mutableDpOffsetStateOf(x: Dp, y: Dp): MutableDpOffsetState = MutableDpOffsetStateImpl(DpOffset(x, y))
+
+inline operator fun DpOffsetState.getValue(
+    thisObj: Any?,
+    property: KProperty<*>
+): DpOffset = value
+
+inline operator fun MutableDpOffsetState.setValue(
+    thisObj: Any?,
+    property: KProperty<*>,
+    value: DpOffset
+) {
+    this.value = value
+}
 
 @Stable
 interface DpOffsetState : State<DpOffset> {
@@ -193,6 +260,19 @@ fun mutableColorStateOf(red: Int, green: Int, blue: Int, alpha: Int = 255): Muta
     MutableColorStateImpl(Color(red, green, blue, alpha))
 @JvmName("mutableColorStateOfLong")
 fun mutableColorStateOf(value: Long): MutableColorState = MutableColorStateImpl(Color(value))
+
+inline operator fun ColorState.getValue(
+    thisObj: Any?,
+    property: KProperty<*>
+): Color = value
+
+inline operator fun MutableColorState.setValue(
+    thisObj: Any?,
+    property: KProperty<*>,
+    value: Color
+) {
+    this.value = value
+}
 
 @Stable
 interface ColorState : State<Color> {
@@ -258,12 +338,33 @@ fun mutableIntSizeStateOf(value: IntSize): MutableIntSizeState = MutableIntSizeS
 @JvmName("mutableIntSizeStateOfWh")
 fun mutableIntSizeStateOf(width: Int, height: Int): MutableIntSizeState = MutableIntSizeStateImpl(IntSize(width, height))
 
+inline operator fun VelocityState.getValue(
+    thisObj: Any?,
+    property: KProperty<*>
+): Velocity = value
+
+inline operator fun MutableVelocityState.setValue(
+    thisObj: Any?,
+    property: KProperty<*>,
+    value: Velocity
+) {
+    this.value = value
+}
+
 @Stable
 interface IntSizeState : State<IntSize> {
     override val value: IntSize
 }
 
 inline operator fun IntSizeState.getValue(thisObj: Any?, property: KProperty<*>): IntSize = value
+
+inline operator fun MutableIntSizeState.setValue(
+    thisObj: Any?,
+    property: KProperty<*>,
+    value: IntSize
+) {
+    this.value = value
+}
 
 @Stable
 interface MutableIntSizeState : IntSizeState, MutableState<IntSize> {
@@ -324,3 +425,16 @@ private value class MutableDpSizeStateImpl(
 fun mutableDpSizeStateOf(value: DpSize): MutableDpSizeState = MutableDpSizeStateImpl(value)
 @JvmName("mutableDpSizeStateOfWh")
 fun mutableDpSizeStateOf(width: Dp, height: Dp): MutableDpSizeState = MutableDpSizeStateImpl(DpSize(width, height))
+
+inline operator fun DpSizeState.getValue(
+    thisObj: Any?,
+    property: KProperty<*>
+): DpSize = value
+
+inline operator fun MutableDpSizeState.setValue(
+    thisObj: Any?,
+    property: KProperty<*>,
+    value: DpSize
+) {
+    this.value = value
+}
