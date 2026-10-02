@@ -4,8 +4,10 @@ import androidx.compose.ui.Modifier
 import com.nxoim.caif.utils.typeMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class TypeMapCapabilityTest {
@@ -53,6 +55,54 @@ class TypeMapCapabilityTest {
         assertNotNull(retrievedBack)
         retrievedBack.onBackProgress(0.8f)
         assertEquals(0.8f, back.progress)
+    }
+
+    @Test
+    fun givenTypeMap_whenAddingAndRemovingTypes_thenMembershipAndSizeTrackEntries() {
+        val map = typeMap()
+        assertTrue(map.isEmpty())
+        assertFalse(map.isNotEmpty())
+        assertEquals(0, map.size)
+
+        val swipe = SwipeImpl()
+        map.put<SwipeCap>(swipe)
+        assertFalse(map.isEmpty())
+        assertTrue(map.isNotEmpty())
+        assertEquals(1, map.size)
+        assertTrue(map.contains<SwipeCap>())
+        assertFalse(map.contains<PredictiveBackCap>())
+        assertSame(swipe, map.get<SwipeCap>())
+
+        map.put<PredictiveBackCap>(PredictiveBackImpl())
+        assertEquals(2, map.size)
+        assertTrue(map.remove<SwipeCap>())
+        assertFalse(map.remove<SwipeCap>())
+        assertNull(map.get<SwipeCap>())
+        assertEquals(1, map.size)
+
+        map.clear()
+        assertTrue(map.isEmpty())
+        assertEquals(0, map.size)
+    }
+
+    @Test
+    fun givenTypeMap_whenGettingOrPutting_thenCreatesOnceAndRetainsExistingInstance() {
+        val map = typeMap()
+        val swipe = SwipeImpl()
+        var supplierCalls = 0
+        val created = map.getOrPut<SwipeCap> {
+            supplierCalls++
+            swipe
+        }
+        val retained = map.getOrPut<SwipeCap> {
+            error("An existing capability must not invoke the supplier")
+        }
+
+        assertSame(swipe, created)
+        assertSame(swipe, retained)
+        assertSame(swipe, map.get<SwipeCap>())
+        assertEquals(1, supplierCalls)
+        assertEquals(1, map.size)
     }
 
     private class CombinedAnimation : BaseItemAnimation<String>(), SwipeCap, PredictiveBackCap {

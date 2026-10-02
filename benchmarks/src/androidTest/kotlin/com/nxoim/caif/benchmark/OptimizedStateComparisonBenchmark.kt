@@ -1,5 +1,6 @@
 package com.nxoim.caif.benchmark
 
+import androidx.benchmark.BlackHole
 import androidx.benchmark.junit4.BenchmarkRule
 import androidx.benchmark.junit4.measureRepeated
 import androidx.compose.animation.core.VectorConverter
@@ -33,168 +34,192 @@ class OptimizedStateComparisonBenchmark {
     val benchmarkRule = BenchmarkRule()
 
     @Test
-    fun a1_rawOffset_optimized() = benchmarkRule.measureRepeated {
-        val state = mutableOffsetStateOf(Offset.Zero)
+    fun rawOffset_optimized() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableOffsetStateOf(Offset.Zero) }
         var acc = 0f
         for (i in 0 until 5000) {
-            state.value = Offset(i.toFloat(), (i * 2).toFloat())
+            state.value = Offset(i.toFloat(), (i * 2f))
             acc += state.value.x
         }
+        BlackHole.consume(acc)
     }
 
     @Test
-    fun a2_rawOffset_standard() = benchmarkRule.measureRepeated {
-        val state = mutableStateOf(Offset.Zero)
+    fun rawOffset_standard() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableStateOf(Offset.Zero) }
         var acc = 0f
         for (i in 0 until 5000) {
-            state.value = Offset(i.toFloat(), (i * 2).toFloat())
+            state.value = Offset(i.toFloat(), (i * 2f))
             acc += state.value.x
         }
+        BlackHole.consume(acc)
     }
 
     @Test
-    fun b1_rawIntOffset_optimized() = benchmarkRule.measureRepeated {
-        val state = mutableIntOffsetStateOf(IntOffset.Zero)
+    fun rawIntOffset_optimized() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableIntOffsetStateOf(IntOffset.Zero) }
         var acc = 0
         for (i in 0 until 5000) {
             state.value = IntOffset(i, i * 2)
             acc += state.value.x
         }
+        BlackHole.consume(acc)
     }
 
     @Test
-    fun b2_rawIntOffset_standard() = benchmarkRule.measureRepeated {
-        val state = mutableStateOf(IntOffset.Zero)
+    fun rawIntOffset_standard() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableStateOf(IntOffset.Zero) }
         var acc = 0
         for (i in 0 until 5000) {
             state.value = IntOffset(i, i * 2)
             acc += state.value.x
         }
+        BlackHole.consume(acc)
     }
 
     @Test
-    fun c1_rawFloat_optimized() = benchmarkRule.measureRepeated {
-        val state = mutableFloatStateOf(0f)
+    fun rawFloat_optimized() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableFloatStateOf(0f) }
         var acc = 0f
         for (i in 0 until 5000) {
             state.floatValue = i.toFloat()
             acc += state.floatValue
         }
+        BlackHole.consume(acc)
     }
 
     @Test
-    fun c2_rawFloat_standard() = benchmarkRule.measureRepeated {
-        val state = mutableStateOf(0f)
+    fun rawFloat_standard() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableStateOf(0f) }
         var acc = 0f
         for (i in 0 until 5000) {
             state.value = i.toFloat()
             acc += state.value
         }
+        BlackHole.consume(acc)
     }
 
     @Test
-    fun d1_rawDp_optimized() = benchmarkRule.measureRepeated {
-        val state = mutableDpStateOf(0.dp)
+    fun rawDp_optimized() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableDpStateOf(0.dp) }
         var acc = 0f
         for (i in 0 until 5000) {
             state.value = i.dp
             acc += state.value.value
         }
+        BlackHole.consume(acc)
     }
 
     @Test
-    fun d2_rawDp_standard() = benchmarkRule.measureRepeated {
-        val state = mutableStateOf(0.dp)
+    fun rawDp_standard() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableStateOf(0.dp) }
         var acc = 0f
         for (i in 0 until 5000) {
             state.value = i.dp
             acc += state.value.value
         }
+        BlackHole.consume(acc)
     }
 
     @Test
-    fun e1_rawColor_optimized() = benchmarkRule.measureRepeated {
-        val state = mutableColorStateOf(Color.Black)
+    fun rawColor_optimized() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableColorStateOf(Color.Black) }
         var acc = 0UL
         for (i in 0 until 5000) {
             state.value = Color(0xFF000000UL or i.toULong())
             acc = acc xor state.value.value
         }
+        BlackHole.consume(acc.toLong())
     }
 
     @Test
-    fun e2_rawColor_standard() = benchmarkRule.measureRepeated {
-        val state = mutableStateOf(Color.Black)
+    fun rawColor_standard() = benchmarkRule.measureRepeated {
+        val state = runWithMeasurementDisabled { mutableStateOf(Color.Black) }
         var acc = 0UL
         for (i in 0 until 5000) {
             state.value = Color(0xFF000000UL or i.toULong())
             acc = acc xor state.value.value
         }
+        BlackHole.consume(acc.toLong())
     }
 
-    // --- AnimatedValue Interruption Snaps (500 iterations) ---
-
     @Test
-    fun f1_animatedOffset_optimized() = benchmarkRule.measureRepeated {
-        val animated = AnimatedOffset(Offset.Zero)
+    fun idleAnimatedOffsetWrites_optimized() = benchmarkRule.measureRepeated {
+        val animated = runWithMeasurementDisabled { AnimatedOffset(Offset.Zero) }
         for (i in 0 until 500) {
             animated.value = Offset(i.toFloat(), (i * 2).toFloat())
         }
+        BlackHole.consume(animated.value)
     }
 
     @Test
-    fun f2_animatedOffset_standard() = benchmarkRule.measureRepeated {
-        val animated = GenericMutableAnimatedValue(Offset.VectorConverter, Offset.Zero, { Offset.Zero })
+    fun idleAnimatedOffsetWrites_standard() = benchmarkRule.measureRepeated {
+        val animated = runWithMeasurementDisabled {
+            GenericMutableAnimatedValue(Offset.VectorConverter, Offset.Zero, { Offset.Zero })
+        }
         for (i in 0 until 500) {
             animated.value = Offset(i.toFloat(), (i * 2).toFloat())
         }
+        BlackHole.consume(animated.value)
     }
 
     @Test
-    fun g1_animatedFloat_optimized() = benchmarkRule.measureRepeated {
-        val animated = AnimatedFloat(0f)
+    fun idleAnimatedFloatWrites_optimized() = benchmarkRule.measureRepeated {
+        val animated = runWithMeasurementDisabled { AnimatedFloat(0f) }
         for (i in 0 until 500) {
             animated.value = i.toFloat()
         }
+        BlackHole.consume(animated.value)
     }
 
     @Test
-    fun g2_animatedFloat_standard() = benchmarkRule.measureRepeated {
-        val animated = GenericMutableAnimatedValue(Float.VectorConverter, 0f, { 0f })
+    fun idleAnimatedFloatWrites_standard() = benchmarkRule.measureRepeated {
+        val animated = runWithMeasurementDisabled {
+            GenericMutableAnimatedValue(Float.VectorConverter, 0f, { 0f })
+        }
         for (i in 0 until 500) {
             animated.value = i.toFloat()
         }
+        BlackHole.consume(animated.value)
     }
 
     @Test
-    fun h1_animatedIntOffset_optimized() = benchmarkRule.measureRepeated {
-        val animated = AnimatedIntOffset(IntOffset.Zero)
+    fun idleAnimatedIntOffsetWrites_optimized() = benchmarkRule.measureRepeated {
+        val animated = runWithMeasurementDisabled { AnimatedIntOffset(IntOffset.Zero) }
         for (i in 0 until 500) {
             animated.value = IntOffset(i, i * 2)
         }
+        BlackHole.consume(animated.value)
     }
 
     @Test
-    fun h2_animatedIntOffset_standard() = benchmarkRule.measureRepeated {
-        val animated = GenericMutableAnimatedValue(IntOffset.VectorConverter, IntOffset.Zero, { IntOffset.Zero })
+    fun idleAnimatedIntOffsetWrites_standard() = benchmarkRule.measureRepeated {
+        val animated = runWithMeasurementDisabled {
+            GenericMutableAnimatedValue(IntOffset.VectorConverter, IntOffset.Zero, { IntOffset.Zero })
+        }
         for (i in 0 until 500) {
             animated.value = IntOffset(i, i * 2)
         }
+        BlackHole.consume(animated.value)
     }
 
     @Test
-    fun i1_animatedDp_optimized() = benchmarkRule.measureRepeated {
-        val animated = AnimatedDp(0.dp)
+    fun idleAnimatedDpWrites_optimized() = benchmarkRule.measureRepeated {
+        val animated = runWithMeasurementDisabled { AnimatedDp(0.dp) }
         for (i in 0 until 500) {
             animated.value = i.dp
         }
+        BlackHole.consume(animated.value)
     }
 
     @Test
-    fun i2_animatedDp_standard() = benchmarkRule.measureRepeated {
-        val animated = GenericMutableAnimatedValue(Dp.VectorConverter, 0.dp, { 0.dp })
+    fun idleAnimatedDpWrites_standard() = benchmarkRule.measureRepeated {
+        val animated = runWithMeasurementDisabled {
+            GenericMutableAnimatedValue(Dp.VectorConverter, 0.dp, { 0.dp })
+        }
         for (i in 0 until 500) {
             animated.value = i.dp
         }
+        BlackHole.consume(animated.value)
     }
 }

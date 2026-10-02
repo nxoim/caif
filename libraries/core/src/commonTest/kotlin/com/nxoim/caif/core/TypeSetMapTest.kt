@@ -1,12 +1,9 @@
 package com.nxoim.caif.core
 
-import com.nxoim.caif.utils.typeMap
 import com.nxoim.caif.utils.typeSetMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TypeSetMapTest {
@@ -51,7 +48,7 @@ class TypeSetMapTest {
         setMap.put<CapabilityA>(a2)
 
         assertTrue(setMap.remove<CapabilityA>(a1))
-        assertFalse(setMap.remove<CapabilityA>(a1)) // already removed
+        assertFalse(setMap.remove<CapabilityA>(a1))
 
         val setA = setMap.get<CapabilityA>()
         assertEquals(1, setA.size)
@@ -81,32 +78,20 @@ class TypeSetMapTest {
         assertTrue((CapabilityB::class to b1) in visited)
     }
 
+    private data class EqualCapability(val id: Int) : CapabilityA
+
     @Test
-    fun givenTypeMap_whenManipulating_thenBehavesCorrectly() {
-        val map = typeMap()
-        assertTrue(map.isEmpty())
-        assertFalse(map.isNotEmpty())
-        assertEquals(0, map.size)
+    fun givenTypeSetMap_whenAddingDuplicateInstances_thenKeepsOneEqualEntry() {
+        val setMap = typeSetMap()
+        val capability = EqualCapability(1)
 
-        val a1 = ImplA1()
-        map.put<CapabilityA>(a1)
-        assertFalse(map.isEmpty())
-        assertTrue(map.isNotEmpty())
-        assertEquals(1, map.size)
-        assertTrue(map.contains<CapabilityA>())
-        assertFalse(map.contains<CapabilityB>())
-        assertEquals(a1, map.get<CapabilityA>())
+        setMap.put<CapabilityA>(capability)
+        setMap.put<CapabilityA>(capability)
+        setMap.put<CapabilityA>(EqualCapability(1))
 
-        val b1 = map.getOrPut<CapabilityB> { ImplB1() }
-        assertNotNull(b1)
-        assertEquals(2, map.size)
-
-        assertTrue(map.remove<CapabilityA>())
-        assertNull(map.get<CapabilityA>())
-        assertEquals(1, map.size)
-
-        map.clear()
-        assertTrue(map.isEmpty())
-        assertEquals(0, map.size)
+        val stored = setMap.get<CapabilityA>()
+        assertEquals(1, stored.size)
+        assertTrue(capability in stored)
+        assertTrue(EqualCapability(1) in stored)
     }
 }

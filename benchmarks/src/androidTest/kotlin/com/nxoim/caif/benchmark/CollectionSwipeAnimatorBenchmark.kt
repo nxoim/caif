@@ -1,5 +1,6 @@
 package com.nxoim.caif.benchmark
 
+import androidx.benchmark.BlackHole
 import androidx.benchmark.junit4.BenchmarkRule
 import androidx.benchmark.junit4.measureRepeated
 import androidx.compose.ui.Modifier
@@ -42,18 +43,19 @@ class CollectionSwipeAnimatorBenchmark {
     }
 
     @Test
-    fun a_gestureStartAndQueryCapabilities() = benchmarkRule.measureRepeated {
+    fun createAnimatorAndRun20GestureCyclesWithCapabilityQueries() = benchmarkRule.measureRepeated {
         val animator = createAnimator()
         for (i in 0 until 20) {
             val key = keys[i * 5]
             animator.onStart(key)
-            animator.activeGestureCapabilities(Any::class)
+            BlackHole.consume(animator.activeGestureCapabilities(Any::class))
             animator.onEnd()
         }
+        BlackHole.consume(animator)
     }
 
     @Test
-    fun b_gestureSelectiveRelease() = benchmarkRule.measureRepeated {
+    fun createAnimatorAndRunGestureWith50SelectiveReleases() = benchmarkRule.measureRepeated {
         val animator = createAnimator()
         val startKey = keys[50]
         animator.onStart(startKey)
@@ -61,5 +63,6 @@ class CollectionSwipeAnimatorBenchmark {
             animator.releaseFromGesture(keys[i])
         }
         animator.onEnd()
+        BlackHole.consume(animator)
     }
 }

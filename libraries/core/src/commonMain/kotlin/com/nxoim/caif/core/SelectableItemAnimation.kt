@@ -2,6 +2,7 @@ package com.nxoim.caif.core
 
 import androidx.collection.ScatterMap
 import androidx.collection.mutableScatterMapOf
+import androidx.collection.toMutableScatterMap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -100,8 +101,10 @@ class SelectableItemAnimationBuilder<Context> internal constructor() {
                 )
             }
         return SelectableItemAnimationImpl(
-            animations = animations.asMap(),
-            selectorsByCapability = selectorsByCapability,
+            // a captured builder can be extended after build.
+            // built selections own their storage.
+            animations = animations.toMutableScatterMap().asMap(),
+            selectorsByCapability = selectorsByCapability.toMutableScatterMap(),
             defaultSelector = defaultSelector,
             strategy = strategy
         )
