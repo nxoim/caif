@@ -19,6 +19,7 @@ import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastFirstOrNull
 import kotlin.math.abs
 
@@ -346,7 +347,7 @@ private suspend fun AwaitPointerEventScope.awaitGesturePickup(
 
     while (true) {
         val event = awaitPointerEvent(PointerEventPass.Final)
-        val pressedChanges = event.changes.filter { it.pressed }
+        val pressedChanges = event.changes.fastFilter { it.pressed }
         if (pressedChanges.isEmpty()) return null
 
         if (event.changes.all { !it.isConsumed }) {

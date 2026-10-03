@@ -9,8 +9,6 @@ import com.arkivanov.decompose.router.stack.childStack
 import com.arkivanov.decompose.router.stack.pop
 import com.arkivanov.decompose.router.stack.pushNew
 import com.arkivanov.essenty.lifecycle.doOnDestroy
-import com.nxoim.evolpagink.core.InternalPageableApi
-import com.nxoim.evolpagink.core.Pageable
 import com.nxoim.evolpagink.core.pageable
 import com.nxoim.evolpagink.core.prefetchMinimumItemAmount
 import com.nxoim.sample.model.KanbanCategory
@@ -128,10 +126,9 @@ internal class CategorySelectionModel(
     private val onCategorySelected: (String) -> Unit,
     modelScope: CoroutineScope,
 ) : CategorySelectionController {
-    private val categoryPageSize = 2
+    private val categoryPageSize = 5
 
-    @OptIn(InternalPageableApi::class)
-    override val categories: Pageable<Int, KanbanCategory> = pageable(
+    override val categories = pageable(
         coroutineScope = modelScope,
         onPage = { page ->
             val start = page * categoryPageSize
@@ -143,7 +140,6 @@ internal class CategorySelectionModel(
         strategy = prefetchMinimumItemAmount(
             minimumItemAmount = categoryPageSize,
         ),
-        initialItems = emptyList(),
         pageItemKey = KanbanCategory::id,
     )
 

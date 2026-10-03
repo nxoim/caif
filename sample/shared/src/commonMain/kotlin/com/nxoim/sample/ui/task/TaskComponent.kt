@@ -6,12 +6,9 @@ import com.arkivanov.decompose.router.stack.childStack
 import com.arkivanov.decompose.router.stack.pop
 import com.arkivanov.decompose.router.stack.pushNew
 import com.arkivanov.essenty.lifecycle.doOnDestroy
-import com.nxoim.evolpagink.core.InternalPageableApi
-import com.nxoim.evolpagink.core.Pageable
 import com.nxoim.evolpagink.core.pageable
 import com.nxoim.evolpagink.core.prefetchMinimumItemAmount
 import com.nxoim.sample.model.KanbanNote
-import com.nxoim.sample.model.KanbanTask
 import com.nxoim.sample.ui.common.LoadState
 import com.nxoim.sample.ui.common.asLoadState
 import kotlinx.coroutines.CoroutineScope
@@ -19,7 +16,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.Serializable
 
@@ -69,17 +65,18 @@ internal class TaskDetailsModel(
     private val notePageSize = 5
     private val cachedTask = source.getCachedTask(taskId)
 
-    override val task: StateFlow<LoadState<KanbanTask>> = source
+    override val task = source
         .getTask(taskId)
-        .asLoadState()
+        .asLoadState(taskId)
         .stateIn(
             scope = modelScope,
-            started = SharingStarted.Eagerly,
-            initialValue = cachedTask?.let { LoadState.Content(it) } ?: LoadState.Loading,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = cachedTask
+                ?.let { LoadState.Content(it, taskId) }
+                ?: LoadState.Loading(taskId),
         )
 
-    @OptIn(InternalPageableApi::class)
-    override val notes: Pageable<Int, KanbanNote> = pageable(
+    override val notes = pageable(
         coroutineScope = modelScope,
         onPage = { page ->
             val start = page * notePageSize
@@ -92,7 +89,6 @@ internal class TaskDetailsModel(
         strategy = prefetchMinimumItemAmount(
             minimumItemAmount = notePageSize,
         ),
-        initialItems = emptyList(),
         pageItemKey = KanbanNote::id,
     )
 }

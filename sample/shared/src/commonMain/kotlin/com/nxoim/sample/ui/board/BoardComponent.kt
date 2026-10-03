@@ -1,9 +1,10 @@
 package com.nxoim.sample.ui.board
 
+import androidx.compose.ui.util.fastFilter
+import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.util.fastMap
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.essenty.lifecycle.doOnDestroy
-import com.nxoim.evolpagink.core.InternalPageableApi
-import com.nxoim.evolpagink.core.Pageable
 import com.nxoim.evolpagink.core.pageable
 import com.nxoim.evolpagink.core.prefetchMinimumItemAmount
 import com.nxoim.sample.model.KanbanCategory
@@ -11,11 +12,9 @@ import com.nxoim.sample.model.KanbanTask
 import com.nxoim.sample.model.TaskStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -28,10 +27,7 @@ internal class BoardComponent(
     val model = BoardModel(source, modelScope)
 
     init {
-        context.lifecycle.doOnDestroy {
-            model.close()
-            modelScope.cancel()
-        }
+        context.lifecycle.doOnDestroy(modelScope::cancel)
     }
 }
 
@@ -42,7 +38,7 @@ internal class BoardModel(
     private val categoryPageSize = 2
     private val categoryModels = BoardCategoryModelCache(source, modelScope)
 
-    override val categories: Pageable<Int, BoardCategoryController> = pageable(
+    override val categories = pageable(
         coroutineScope = modelScope,
         onPage = { page ->
             val start = page * categoryPageSize
@@ -51,18 +47,18 @@ internal class BoardModel(
                     startIndex = start,
                     pageSize = categoryPageSize,
                 )
-                .map { categories -> categories.map(categoryModels::getOrCreate) }
+                .map { categories -> categories.fastMap(categoryModels::getOrCreate) }
         },
         strategy = prefetchMinimumItemAmount(
             minimumItemAmount = categoryPageSize,
         ),
-        initialItems = emptyList(),
         pageItemKey = BoardCategoryController::id,
     )
 
     init {
         modelScope.launch {
             var hasLoadedCategories = categories.items.value.isNotEmpty()
+
             categories.items.collect { loadedCategories ->
                 if (!hasLoadedCategories && loadedCategories.isEmpty()) return@collect
 
@@ -73,35 +69,26 @@ internal class BoardModel(
     }
 
     override fun reset() = source.reset()
-
-    fun close() {
-        categoryModels.clear()
-    }
 }
 
-@OptIn(InternalPageableApi::class)
 internal class BoardCategoryModel(
     private val source: BoardSource,
     override val id: String,
     initialCategory: KanbanCategory,
-    parentScope: CoroutineScope,
+    private val scope: CoroutineScope,
 ) : BoardCategoryController {
-    private val scope = CoroutineScope(
-        parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]),
-    )
-
-    override val state: StateFlow<BoardCategoryState> = source
+    override val state = source
         .getCategory(id)
         .map(::stateFor)
         .stateIn(
             scope = scope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(),
             initialValue = stateFor(initialCategory),
         )
 
-    private val taskPageSize = 2
+    private val taskPageSize = 5
 
-    override val tasks: Pageable<Int, KanbanTask> = pageable(
+    override val tasks = pageable(
         coroutineScope = scope,
         onPage = { page ->
             val start = page * taskPageSize
@@ -115,22 +102,16 @@ internal class BoardCategoryModel(
             minimumItemAmount = taskPageSize,
         ),
         initialItems = initialCategory.tasks
-            .filter { it.status != TaskStatus.Archived }
+            .fastFilter { it.status != TaskStatus.Archived }
             .take(taskPageSize),
         pageItemKey = KanbanTask::id,
     )
 
-    private fun stateFor(category: KanbanCategory?): BoardCategoryState {
-        return BoardCategoryState(
-            category = category,
-            openTaskCount = category?.tasks.orEmpty().count { it.status == TaskStatus.Open },
-            doneTaskCount = category?.tasks.orEmpty().count { it.status == TaskStatus.Done },
-        )
-    }
-
-    fun close() {
-        scope.cancel()
-    }
+    private fun stateFor(category: KanbanCategory?) = BoardCategoryState(
+        category = category,
+        openTaskCount = category?.tasks.orEmpty().count { it.status == TaskStatus.Open },
+        doneTaskCount = category?.tasks.orEmpty().count { it.status == TaskStatus.Done },
+    )
 }
 
 internal data class BoardCategoryState(
@@ -151,21 +132,13 @@ private class BoardCategoryModelCache(
                 source = source,
                 id = category.id,
                 initialCategory = category,
-                parentScope = parentScope,
+                scope = parentScope,
             )
         }
 
     fun retain(loadedIds: Set<String>) {
         instances.keys
             .filterNot(loadedIds::contains)
-            .toList()
-            .forEach { id ->
-                instances.remove(id)?.close()
-            }
-    }
-
-    fun clear() {
-        instances.values.forEach(BoardCategoryModel::close)
-        instances.clear()
+            .fastForEach(instances::remove)
     }
 }

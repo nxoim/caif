@@ -4,7 +4,6 @@ package com.nxoim.sample.ui.category
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalAnimationApi
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -39,10 +38,11 @@ internal fun CategoryStackHost(
 
     updateTransition(categoryState, label = "CategoryStateTransition").Crossfade(
         contentKey = { it::class },
+        modifier = Modifier.sharedBounds(sharedElementKey)
     ) { state ->
         when (state) {
-            LoadState.Loading -> LoadingState()
-            LoadState.NotFound -> NotFoundState(entity = "Category")
+            is LoadState.Loading -> LoadingState()
+            is LoadState.NotFound -> NotFoundState(entity = "Category")
             is LoadState.Error -> ErrorState(entity = "category", cause = state.cause)
             is LoadState.Content -> {
                 val category = state.value
@@ -50,7 +50,6 @@ internal fun CategoryStackHost(
                     stack = component.stack,
                     backHandler = component.backHandler,
                     onPop = component.navigation::navigateBack,
-                    modifier = Modifier.sharedBounds(sharedElementKey),
                     animationFactory = remember(useSharedElements) {
                         decomposeAnimations { child ->
                             when (child) {

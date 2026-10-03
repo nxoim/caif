@@ -19,7 +19,7 @@ composeLifecycle = "2.10.0"
 publish-on-central = "9.2.4"
 dokka = "2.2.0"
 turbine = "1.2.1"
-evolpagink = "0.14.2"
+evolpagink = "0.14.3"
 decompose = "3.5.0"
 
 [libraries]

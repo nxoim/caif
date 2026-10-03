@@ -4,22 +4,24 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
-internal sealed interface LoadState<out T> {
-    data object Loading : LoadState<Nothing>
+internal sealed interface LoadState<out T, I> {
+    val id: I
 
-    data class Content<T>(val value: T) : LoadState<T>
+    data class Loading<I>(override val id: I) : LoadState<Nothing, I>
 
-    data object NotFound : LoadState<Nothing>
+    data class Content<T, I>(val value: T, override val id: I) : LoadState<T, I>
 
-    data class Error(val cause: Throwable) : LoadState<Nothing>
+    data class NotFound<I>(override val id: I) : LoadState<Nothing, I>
+
+    data class Error<I>(val cause: Throwable, override val id: I) : LoadState<Nothing, I>
 }
 
-internal fun <T> Flow<T?>.asLoadState(): Flow<LoadState<T>> = map { value ->
+internal fun <T, I> Flow<T?>.asLoadState(id: I): Flow<LoadState<T, I>> = map { value ->
     if (value == null) {
-        LoadState.NotFound
+        LoadState.NotFound(id)
     } else {
-        LoadState.Content(value)
+        LoadState.Content(value, id)
     }
 }.catch { cause ->
-    emit(LoadState.Error(cause))
+    emit(LoadState.Error(cause, id))
 }

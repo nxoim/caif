@@ -4,7 +4,6 @@ package com.nxoim.sample.ui.task
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalAnimationApi
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -45,10 +44,11 @@ internal fun TaskDetailsStackHost(
 
     updateTransition(taskState, label = "TaskStateTransition").Crossfade(
         contentKey = { it::class },
+        modifier = Modifier.sharedBounds(sharedElementKey)
     ) { state ->
         when (state) {
-            LoadState.Loading -> LoadingState()
-            LoadState.NotFound -> NotFoundState(entity = "Task")
+            is LoadState.Loading -> LoadingState()
+            is LoadState.NotFound -> NotFoundState(entity = "Task")
             is LoadState.Error -> ErrorState(entity = "task", cause = state.cause)
             is LoadState.Content -> {
                 val task = state.value
@@ -56,7 +56,6 @@ internal fun TaskDetailsStackHost(
                     stack = component.stack,
                     backHandler = component.backHandler,
                     onPop = component.navigation::navigateBack,
-                    modifier = Modifier.sharedBounds(sharedElementKey),
                     animationFactory = remember(useSharedElements) {
                         decomposeAnimations { child ->
                             when (child) {
@@ -89,9 +88,10 @@ internal fun TaskDetailsStackHost(
 
                             is TaskChild.Note -> NoteViewerScreen(
                                 controller = child.component.model,
-                                provideSharedKey = { note ->
-                                    sharedElementKeys.note(task.id, note.id)
-                                },
+                                sharedElementKey = sharedElementKeys.note(
+                                    task.id,
+                                    child.component.model.note.value.id
+                                ),
                                 onBack = component.navigation::navigateBack,
                             )
                         }
@@ -103,7 +103,6 @@ internal fun TaskDetailsStackHost(
 }
 
 internal interface TaskDetailsController {
-    val task: StateFlow<LoadState<KanbanTask>>
+    val task: StateFlow<LoadState<KanbanTask, String>>
     val notes: Pageable<Int, KanbanNote>
 }
-

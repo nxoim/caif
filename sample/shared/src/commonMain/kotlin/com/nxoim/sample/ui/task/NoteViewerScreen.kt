@@ -1,5 +1,10 @@
+@file:OptIn(ExperimentalAnimationApi::class)
+
 package com.nxoim.sample.ui.task
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,7 +35,7 @@ import com.nxoim.sample.ui.common.sharedtransition.sharedBounds
 import kotlinx.coroutines.flow.StateFlow
 
 internal interface NoteController {
-    val note: StateFlow<LoadState<KanbanNote>>
+    val note: StateFlow<LoadState<KanbanNote, String>>
 
     fun updateTitle(title: String): Boolean
     fun updateText(text: String): Boolean
@@ -39,76 +44,80 @@ internal interface NoteController {
 @Composable
 internal fun NoteViewerScreen(
     controller: NoteController,
-    provideSharedKey: ((KanbanNote) -> Any)? = null,
+    sharedElementKey: Any? = null,
     onBack: () -> Unit,
 ) {
-    val noteState by controller.note.collectAsState()
-    when (val state = noteState) {
-        LoadState.Loading -> LoadingState()
-        LoadState.NotFound -> NotFoundState(entity = "Note")
-        is LoadState.Error -> ErrorState(entity = "note", cause = state.cause)
-        is LoadState.Content -> {
-            val note = state.value
-            Scaffold(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .sharedBounds(provideSharedKey?.invoke(note)),
-                topBar = {
-                    CenterAlignedTopAppBar(
-                        title = { Text("Note") },
-                        navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                )
-                            }
-                        },
-                    )
-                },
-            ) { innerPadding ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    TextField(
-                        value = note.title,
-                        onValueChange = controller::updateTitle,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = {
-                            Text("Title", style = MaterialTheme.typography.titleLarge)
-                        },
-                        textStyle = MaterialTheme.typography.titleLarge,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent,
-                        ),
-                        singleLine = true,
-                    )
-                    TextField(
-                        value = note.text,
-                        onValueChange = controller::updateText,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = {
-                            Text("Note text…", style = MaterialTheme.typography.bodyLarge)
-                        },
-                        textStyle = MaterialTheme.typography.bodyLarge,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent,
-                        ),
-                        minLines = 8,
-                        maxLines = 16,
-                    )
+    val state by controller.note.collectAsState()
+
+    updateTransition(state, "NoteViewerScreen").Crossfade(
+        contentKey = { it::class },
+        modifier = Modifier
+            .fillMaxSize()
+            .sharedBounds(sharedElementKey)
+    ) { note ->
+        when (note) {
+            is LoadState.Loading -> LoadingState()
+            is LoadState.NotFound -> NotFoundState(entity = "Note")
+            is LoadState.Error -> ErrorState(entity = "note", cause = note.cause)
+            is LoadState.Content -> {
+                Scaffold(
+                    topBar = {
+                        CenterAlignedTopAppBar(
+                            title = { Text("Note") },
+                            navigationIcon = {
+                                IconButton(onClick = onBack) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
+                                    )
+                                }
+                            },
+                        )
+                    },
+                ) { innerPadding ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TextField(
+                            value = note.value.title,
+                            onValueChange = controller::updateTitle,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = {
+                                Text("Title", style = MaterialTheme.typography.titleLarge)
+                            },
+                            textStyle = MaterialTheme.typography.titleLarge,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent,
+                            ),
+                            singleLine = true,
+                        )
+                        TextField(
+                            value = note.value.text,
+                            onValueChange = controller::updateText,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = {
+                                Text("Note text…", style = MaterialTheme.typography.bodyLarge)
+                            },
+                            textStyle = MaterialTheme.typography.bodyLarge,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent,
+                            ),
+                            minLines = 8,
+                            maxLines = 16,
+                        )
+                    }
                 }
             }
         }

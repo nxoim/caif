@@ -6,10 +6,8 @@ import com.arkivanov.decompose.router.stack.childStack
 import com.arkivanov.decompose.router.stack.pop
 import com.arkivanov.decompose.router.stack.pushNew
 import com.arkivanov.essenty.lifecycle.doOnDestroy
-import com.nxoim.evolpagink.core.InternalPageableApi
 import com.nxoim.evolpagink.core.pageable
 import com.nxoim.evolpagink.core.prefetchMinimumItemAmount
-import com.nxoim.sample.model.KanbanCategory
 import com.nxoim.sample.model.KanbanTask
 import com.nxoim.sample.ui.common.LoadState
 import com.nxoim.sample.ui.common.asLoadState
@@ -24,7 +22,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.Serializable
 
@@ -89,18 +86,17 @@ internal class CategoryModel(
     private val taskPageSize = 10
     private val cachedCategory = source.getCachedCategory(categoryId)
 
-    val category: StateFlow<LoadState<KanbanCategory>> = source
+    val category = source
         .getCategory(categoryId)
-        .asLoadState()
+        .asLoadState(categoryId)
         .stateIn(
             scope = modelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(),
             initialValue = cachedCategory
-                ?.let { LoadState.Content(it) }
-                ?: LoadState.Loading,
+                ?.let { LoadState.Content(it, categoryId) }
+                ?: LoadState.Loading(categoryId),
         )
 
-    @OptIn(InternalPageableApi::class)
     override val tasks = pageable(
         coroutineScope = modelScope,
         onPage = { page ->

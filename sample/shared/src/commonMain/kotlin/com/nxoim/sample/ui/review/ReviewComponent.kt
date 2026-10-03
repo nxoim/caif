@@ -1,11 +1,8 @@
-@file:OptIn(InternalPageableApi::class)
-
 package com.nxoim.sample.ui.review
 
+import androidx.compose.ui.util.fastFilter
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.essenty.lifecycle.doOnDestroy
-import com.nxoim.evolpagink.core.InternalPageableApi
-import com.nxoim.evolpagink.core.Pageable
 import com.nxoim.evolpagink.core.pageable
 import com.nxoim.evolpagink.core.prefetchMinimumItemAmount
 import com.nxoim.sample.model.KanbanTask
@@ -16,7 +13,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -51,28 +47,28 @@ internal class ReviewModel(
     private val categoryId: String,
     coroutineScope: CoroutineScope,
 ) : ReviewController {
-    private val pageSize = 2
+    private val pageSize = 5
     private val reviewedTaskIds = MutableStateFlow<Set<String>>(emptySet())
     private val categoryTasks = source
         .getTasks(categoryId)
         .stateIn(
             scope = coroutineScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(),
             initialValue = null,
         )
 
-    override val reviewState: StateFlow<ReviewState> = combine(
+    override val reviewState = combine(
         categoryTasks,
         reviewedTaskIds,
     ) { tasks, reviewedIds ->
         reviewStateFor(tasks, reviewedIds)
     }.stateIn(
             scope = coroutineScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(),
             initialValue = reviewStateFor(tasks = null, reviewedTaskIds = emptySet()),
         )
 
-    override val remainingTasks: Pageable<Int, KanbanTask> = pageable(
+    override val remainingTasks = pageable(
         coroutineScope = coroutineScope,
         context = reviewedTaskIds,
         onPage = { page ->
@@ -136,7 +132,7 @@ internal class ReviewModel(
         fun reviewableTasks(
             tasks: List<KanbanTask>,
             reviewedTaskIds: Set<String>,
-        ): List<KanbanTask> = tasks.filter { task -> task.isReviewable(reviewedTaskIds) }
+        ): List<KanbanTask> = tasks.fastFilter { task -> task.isReviewable(reviewedTaskIds) }
 
         fun KanbanTask.isReviewable(reviewedTaskIds: Set<String>): Boolean =
             status == TaskStatus.Open && id !in reviewedTaskIds

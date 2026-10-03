@@ -179,9 +179,9 @@ class CollectionSwipeAnimator<Key : Any, Context>(
             visible.fastForEach(::add)
         }
 
-        visible.forEachIndexed { index, key ->
+        visible.fastForEachIndexed { index, key ->
             val isGestureAlreadyOwned = key in stillMidDrag && key in settleables
-            if (isGestureAlreadyOwned) return@forEachIndexed
+            if (isGestureAlreadyOwned) return@fastForEachIndexed
             val previousIndex = lastAnimationTargets[key]?.index
             launchAnimationToTarget(
                 key,
@@ -223,7 +223,7 @@ class CollectionSwipeAnimator<Key : Any, Context>(
 
     private fun visibleIndexOf(key: Key): Int {
         var visibleIndex = 0
-        visibleKeysSnapshot().forEach { candidate ->
+        visibleKeysSnapshot().fastForEach { candidate ->
             if (candidate == key) return visibleIndex
             visibleIndex++
         }

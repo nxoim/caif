@@ -190,4 +190,4 @@ internal interface TaskListController {
     fun deleteTask(taskId: String): Boolean
 }
 
-private val TaskSwipeDistanceConfirmationLimit = 1000.dp
+private val TaskSwipeDistanceConfirmationLimit = 256.dp

@@ -1,6 +1,7 @@
 package com.nxoim.caif.prefabs.stack
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.util.fastForEachIndexed
 
 @Immutable
 fun interface ContextFactory<ItemType, Context, CreationContext> {
@@ -50,7 +51,7 @@ internal class StackCreationContextIndexLookup<ItemType>(
 
     private fun buildIndices(snapshot: List<ItemType>): Map<ItemType, Int> {
         val indices = HashMap<ItemType, Int>(snapshot.size)
-        snapshot.forEachIndexed { index, item ->
+        snapshot.fastForEachIndexed { index, item ->
             // match indexOf by retaining the first equal item
             // if a standalone resolver receives duplicates.
             if (item !in indices) indices[item] = index

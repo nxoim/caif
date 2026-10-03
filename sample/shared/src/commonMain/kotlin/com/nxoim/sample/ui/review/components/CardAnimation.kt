@@ -69,7 +69,7 @@ internal class CardStackItemAnimation : StabilizedItemAnimation<CardContext>(), 
     )
 
 
-    override val modifier: Modifier = Modifier
+    override val modifier = Modifier
         .layout { measurable, constraints ->
             val placeable = measurable.measure(constraints)
             layout(placeable.width, placeable.height) {
@@ -228,7 +228,7 @@ internal abstract class StabilizedItemAnimation<Context> :
         return entry
     }
 
-    override suspend fun runStabilization() = coroutineScope {
+    final override suspend fun runStabilization() = coroutineScope {
         entries.fastForEach { launch { it.run() } }
     }
 
