@@ -65,15 +65,19 @@ class ExpansionSwipeStackAnimation(
 
     context(density: Density)
     override fun onSwipeUpdate(delta: Offset) {
-        offset.value += delta
-        val maxPx = with(density) { maximumDistance.toPx() }
-        scale.value = (1f - swipeDistanceFraction(offset.value, maxPx) * scaleReduction)
-            .coerceAtLeast(minimumScale)
+        if (currentContext?.position?.isTopmost == true) {
+            offset.value += delta
+            val maxPx = with(density) { maximumDistance.toPx() }
+            scale.value = (1f - swipeDistanceFraction(offset.value, maxPx) * scaleReduction)
+                .coerceAtLeast(minimumScale)
+        }
     }
 
     context(density: Density)
     override fun onSwipeEnd(velocity: Velocity) {
-        offset.prepareVelocity(Offset(velocity.x, velocity.y))
+        if (currentContext?.position?.isTopmost == true) {
+            offset.prepareVelocity(Offset(velocity.x, velocity.y))
+        }
     }
 }
 

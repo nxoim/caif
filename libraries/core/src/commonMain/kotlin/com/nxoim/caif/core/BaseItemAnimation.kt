@@ -16,6 +16,8 @@ abstract class BaseItemAnimation<Context> : ItemAnimation<Context>, AnimationBui
     private val registeredValues = mutableListOf<TargetableMutableAnimatedValue<*, Context>>()
     private val registeredChildren = mutableListOf<ItemAnimation<Context>>()
     private var customAnimateTo: (suspend Context.() -> Unit)? = null
+    protected var currentContext: Context? = null
+        private set
 
     override fun <ValueType> registerAnimation(
         block: () -> TargetableMutableAnimatedValue<ValueType, Context>
@@ -36,11 +38,13 @@ abstract class BaseItemAnimation<Context> : ItemAnimation<Context>, AnimationBui
     }
 
     final override fun reset(context: Context) {
+        currentContext = context
         registeredValues.fastForEach { it.snapToTarget(context) }
         registeredChildren.fastForEach { it.reset(context) }
     }
 
     final override suspend fun animateTo(target: Context) {
+        currentContext = target
         val custom = customAnimateTo
 
         if (custom != null) {
