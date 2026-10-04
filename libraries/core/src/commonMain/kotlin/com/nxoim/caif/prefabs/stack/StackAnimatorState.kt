@@ -18,21 +18,29 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.jvm.JvmName
 import kotlin.reflect.KClass
 
+/**
+ * Built-in position, participation, rendering, and layout
+ * defaults share [stackOrder].
+ */
 @Composable
 @JvmName("rememberStackAnimatorStateStackItemContext")
 fun <ItemType, Key : Any> rememberStackAnimatorState(
     stack: State<List<ItemType>>,
     keyFor: (ItemType) -> Key,
     factory: ItemAnimationFactory<ItemType, Key, StackItemPosition>,
+    stackOrder: StackOrder = StackOrder.TopmostLast,
     affectedItemsPolicy: AffectedItemsPolicy<ItemType, Key, StackItemPosition> =
-        remember { AffectedItemsPolicy.fromTop() },
+        remember(stackOrder) { AffectedItemsPolicy.fromTop(stackOrder) },
     maxAffected: Int = Int.MAX_VALUE,
     scope: CoroutineScope = rememberCoroutineScope(),
-    renderOrder: RenderOrderStrategy<Key> = remember { RenderOrderStrategy.insertionOrder() }
+    renderOrder: RenderOrderStrategy<Key> = remember(stackOrder) {
+        RenderOrderStrategy.byStackIndex(stackOrder)
+    }
 ): StackAnimatorState<ItemType, Key, StackItemPosition> =
     rememberStackAnimatorState(
         stack = stack,
         keyFor = keyFor,
+        stackOrder = stackOrder,
         maxAffected = maxAffected,
         factory = factory,
         affectedItemsPolicy = affectedItemsPolicy,
@@ -43,27 +51,38 @@ fun <ItemType, Key : Any> rememberStackAnimatorState(
                 AppearanceIntention.Entrance -> StackItemPosition.PreEntered
                 AppearanceIntention.Removal -> StackItemPosition.Removed
                 else -> StackItemPosition.Inside(
-                    indexOf(it),
-                    previousIndexOf(it)
+                    stackOrder.depthFromTop(indexOf(it), stackSnapshot.lastIndex),
+                    previousSnapshot?.let { previous ->
+                        previousIndexOf(it)?.let { index ->
+                            stackOrder.depthFromTop(index, previous.lastIndex)
+                        }
+                    },
                 )
             }
         }
     )
 
+/**
+ * Custom contexts must interpret their snapshot order consistently with [stackOrder].
+ */
 @Composable
 fun <ItemType, Key : Any, Context> rememberStackAnimatorState(
     stack: State<List<ItemType>>,
     keyFor: (ItemType) -> Key,
     factory: ItemAnimationFactory<ItemType, Key, Context>,
     contextFactory: ContextFactory<ItemType, Context, StackCreationContext<ItemType>>,
+    stackOrder: StackOrder = StackOrder.TopmostLast,
     affectedItemsPolicy: AffectedItemsPolicy<ItemType, Key, Context> =
-        remember { AffectedItemsPolicy.fromTop() },
+        remember(stackOrder) { AffectedItemsPolicy.fromTop(stackOrder) },
     maxAffected: Int = Int.MAX_VALUE,
     scope: CoroutineScope = rememberCoroutineScope(),
-    renderOrder: RenderOrderStrategy<Key> = remember { RenderOrderStrategy.insertionOrder() }
+    renderOrder: RenderOrderStrategy<Key> = remember(stackOrder) {
+        RenderOrderStrategy.byStackIndex(stackOrder)
+    }
 ) = rememberStackAnimatorState(
     stack = stack,
     factory = factory,
+    stackOrder = stackOrder,
     resolver = rememberStackContextResolver(
         contextFactory,
         keyFor
@@ -106,7 +125,8 @@ fun <Context, ItemType, Key : Any> defaultStackContextResolver(
             }
 
             val indexLookup = StackCreationContextIndexLookup(stack, previousStack)
-            val result = LinkedHashMap<Key, Pair<Context, StackCreationContext<ItemType>>>(itemsByKey.size)
+            val result =
+                LinkedHashMap<Key, Pair<Context, StackCreationContext<ItemType>>>(itemsByKey.size)
             itemsByKey.forEach { (key, item) ->
                 val isInPrevious = previousKeys?.contains(key) == true
                 val isInCurrent = key in currentKeys
@@ -148,18 +168,21 @@ fun <ItemType, Key : Any, Context, CreationContext> rememberStackAnimatorState(
     stack: State<List<ItemType>>,
     factory: ItemAnimationFactory<ItemType, Key, Context>,
     resolver: ContextResolver<ItemType, Key, Context, CreationContext>,
+    stackOrder: StackOrder = StackOrder.TopmostLast,
     affectedItemsPolicy: AffectedItemsPolicy<ItemType, Key, Context> =
-        remember { AffectedItemsPolicy.fromTop() },
+        remember(stackOrder) { AffectedItemsPolicy.fromTop(stackOrder) },
     maxAffected: Int = Int.MAX_VALUE,
     scope: CoroutineScope = rememberCoroutineScope(),
-    renderOrder: RenderOrderStrategy<Key> = remember { RenderOrderStrategy.insertionOrder() }
+    renderOrder: RenderOrderStrategy<Key> = remember(stackOrder) {
+        RenderOrderStrategy.byStackIndex(stackOrder)
+    }
 ): StackAnimatorState<ItemType, Key, Context> {
     val currentFactory = rememberUpdatedState(factory)
     val currentResolver = rememberUpdatedState(resolver)
     val currentPolicy = rememberUpdatedState(affectedItemsPolicy)
     val currentRenderOrder = rememberUpdatedState(renderOrder)
 
-    val state = remember(stack, maxAffected, scope) {
+    val state = remember(stack, maxAffected, scope, stackOrder) {
         val registry = ItemAnimationRegistry<ItemType, Key, Context> { item, key ->
             currentFactory.value.create(item, key)
         }
@@ -196,7 +219,7 @@ fun <ItemType, Key : Any, Context, CreationContext> rememberStackAnimatorState(
             }
         )
 
-        StackAnimatorStateImpl(orchestrator)
+        StackAnimatorStateImpl(orchestrator, stackOrder)
     }
 
     DisposableEffect(state) {
@@ -210,6 +233,12 @@ inline fun <reified D : CapabilityDispatcher> StackAnimatorState<*, *, *>.getOrC
 ): D = getOrCreateDispatcher(kClass = D::class, factory)
 
 interface StackAnimatorState<ItemType, Key : Any, Context> {
+    /**
+     * Snapshot ordering used by the built-in layout and
+     * transition-retention defaults.
+     */
+    val stackOrder: StackOrder
+
     fun <D : CapabilityDispatcher> getOrCreateDispatcher(
         kClass: KClass<D>,
         factory: (StackCycleController) -> D
@@ -229,12 +258,14 @@ interface StackAnimatorState<ItemType, Key : Any, Context> {
     ): ExternalAnimationRegistration
 
     val itemsToRender: List<Pair<Pair<Key, ItemType>, ItemAnimation<Context>>>
+
     /** Keys in the logical stack snapshot most recently processed by the animator. */
     val targetStackKeys: List<Key>
 }
 
 class StackAnimatorStateImpl<ItemType, Key : Any, Context, CreationContext>(
     private val orchestrator: StackOrchestrator<ItemType, Key, Context, CreationContext>,
+    override val stackOrder: StackOrder = StackOrder.TopmostLast,
 ) : StackAnimatorState<ItemType, Key, Context> {
     private val dispatcherStore = typeMap()
     override val itemsToRender get() = orchestrator.itemsToRender

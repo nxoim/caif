@@ -18,21 +18,23 @@ fun interface AffectedItemsPolicy<ItemType, Key : Any, Context> {
 
     companion object {
         /**
-         * Selects affected items starting at the top of the stack. By default, the last item in
-         * stack is treated as the topmost item; set [reversed] to `false` when the first item is
-         * the topmost item instead.
+         * Traverses the snapshot from its topmost end, using
+         * topmost-last order by default.
          */
         @Suppress("UNCHECKED_CAST")
         fun <ItemType, Key : Any, Context> fromTop(
-            reversed: Boolean = true
-        ) = (if (reversed) FromTopReversed else FromTopForward) as AffectedItemsPolicy<ItemType, Key, Context>
+            stackOrder: StackOrder = StackOrder.TopmostLast
+        ): AffectedItemsPolicy<ItemType, Key, Context> = when (stackOrder) {
+            StackOrder.TopmostFirst -> FromTopmostFirst
+            StackOrder.TopmostLast -> FromTopmostLast
+        } as AffectedItemsPolicy<ItemType, Key, Context>
     }
 }
 
 // bounds animation work on deep stacks by only activating items
 // at the top of the stack that are either currently visible or
 // transitioning from/to visibility
-private class CreateFromTopPolicy(private val reversed: Boolean) : AffectedItemsPolicy<Any?, Any, Any?> {
+private class CreateFromTopPolicy(private val stackOrder: StackOrder) : AffectedItemsPolicy<Any?, Any, Any?> {
     override fun selectAffectedItems(
         stack: List<Any?>,
         keys: Map<Any?, Any>,
@@ -44,7 +46,10 @@ private class CreateFromTopPolicy(private val reversed: Boolean) : AffectedItems
         minAffected: Int
     ): Set<Any> {
         val total = mutableOrderedScatterSetOf<Any>()
-        val stackIndices = stack.indices.let { if (reversed) it.reversed() else it }
+        val stackIndices = when (stackOrder) {
+            StackOrder.TopmostFirst -> stack.indices
+            StackOrder.TopmostLast -> stack.indices.reversed()
+        }
 
         for (index in stackIndices) {
             if (total.size >= maxAffected) break
@@ -89,5 +94,5 @@ private class CreateFromTopPolicy(private val reversed: Boolean) : AffectedItems
     }
 }
 
-private val FromTopReversed = CreateFromTopPolicy(reversed = true)
-private val FromTopForward = CreateFromTopPolicy(reversed = false)
+private val FromTopmostFirst = CreateFromTopPolicy(StackOrder.TopmostFirst)
+private val FromTopmostLast = CreateFromTopPolicy(StackOrder.TopmostLast)

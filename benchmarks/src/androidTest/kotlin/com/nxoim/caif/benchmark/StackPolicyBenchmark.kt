@@ -6,6 +6,7 @@ import androidx.benchmark.junit4.measureRepeated
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nxoim.caif.prefabs.stack.AffectedItemsPolicy
 import com.nxoim.caif.prefabs.stack.RenderOrderStrategy
+import com.nxoim.caif.prefabs.stack.StackOrder
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,9 +24,9 @@ class StackPolicyBenchmark {
     private val previousContexts = stackItems.associateWith { 0 }
     private val visibleKeys = stackItems.takeLast(3).toSet()
     private val isVisible: (String, Int) -> Boolean = { key, _ -> key in visibleKeys }
-    private val byStackIndex = RenderOrderStrategy.byStackIndex<String>()
+    private val byStackIndex = RenderOrderStrategy.byStackIndex<String>(StackOrder.TopmostFirst)
     private val insertionOrder = RenderOrderStrategy.insertionOrder<String>()
-    private val fromTop = AffectedItemsPolicy.fromTop<String, String, Int>()
+    private val fromTop = AffectedItemsPolicy.fromTop<String, String, Int>(StackOrder.TopmostLast)
 
     @Test
     fun renderOrderByStackIndex() = benchmarkRule.measureRepeated {

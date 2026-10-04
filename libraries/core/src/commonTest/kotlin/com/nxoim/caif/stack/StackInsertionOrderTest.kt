@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import com.nxoim.caif.core.ItemAnimation
+import com.nxoim.caif.prefabs.stack.AffectedItemsPolicy
 import com.nxoim.caif.prefabs.stack.AppearanceIntention
 import com.nxoim.caif.prefabs.stack.ContextFactory
 import com.nxoim.caif.prefabs.stack.ItemAnimationRegistry
@@ -11,6 +12,7 @@ import com.nxoim.caif.prefabs.stack.RenderOrderStrategy
 import com.nxoim.caif.prefabs.stack.StackCreationContext
 import com.nxoim.caif.prefabs.stack.StackItemPosition
 import com.nxoim.caif.prefabs.stack.StackOrchestrator
+import com.nxoim.caif.prefabs.stack.StackOrder
 import com.nxoim.caif.prefabs.stack.defaultStackContextResolver
 import com.nxoim.caif.prefabs.stack.indexOf
 import com.nxoim.caif.prefabs.stack.previousIndexOf
@@ -108,6 +110,7 @@ class StackInsertionOrderTest {
                 },
                 keyFor = { it }
             ),
+            affectedItemsPolicy = AffectedItemsPolicy.fromTop(StackOrder.TopmostLast),
             maxAffected = Int.MAX_VALUE,
             renderOrder = RenderOrderStrategy.insertionOrder()
         )

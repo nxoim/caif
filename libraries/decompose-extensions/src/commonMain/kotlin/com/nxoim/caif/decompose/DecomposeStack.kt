@@ -26,8 +26,8 @@ import com.arkivanov.decompose.router.stack.ChildStack
 import com.arkivanov.decompose.value.Value
 import com.arkivanov.essenty.backhandler.BackHandler
 import com.nxoim.caif.core.ItemAnimation
-import com.nxoim.caif.prefabs.stack.RenderOrderStrategy
 import com.nxoim.caif.prefabs.stack.StackAnimatorLayout
+import com.nxoim.caif.prefabs.stack.StackOrder
 import com.nxoim.caif.prefabs.stack.getOrCreateDispatcher
 import com.nxoim.caif.prefabs.stack.rememberStackAnimatorState
 import com.nxoim.caif.swipeable.SwipeConstraint
@@ -65,13 +65,14 @@ fun <Configuration : Any, Child : Any> DecomposeStack(
     content: @Composable AnimatedVisibilityScope.(Child) -> Unit,
 ) {
     val saveableStateHolder = rememberSaveableStateHolder()
-    val stackState = rememberStackItems(stack, ::reverseStackItems)
+    val stackState = rememberStackItems(stack) { it.items }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val animationEnvironment = rememberStackAnimationEnvironmentState()
         val parentSwipeGesture = LocalParentBackGesture.current
         val animator = rememberStackAnimatorState(
             stack = stackState,
+            stackOrder = StackOrder.TopmostLast,
             keyFor = { it.configuration },
             factory = { child, _ ->
                 animationFactory.create(child.instance, child.configuration)
@@ -79,7 +80,6 @@ fun <Configuration : Any, Child : Any> DecomposeStack(
             contextFactory = remember(animationEnvironment) {
                 stackAnimationContextFactory { animationEnvironment.value }
             },
-            renderOrder = remember { RenderOrderStrategy.byStackIndex() },
         )
 
         val swipeDispatcher = animator.getOrCreateDispatcher(::SwipeCapabilityDispatcher)
@@ -217,7 +217,3 @@ private fun List<Created<*, *>>.mapKeys(): Set<String> {
 private class Keys(
     var set: Set<String>,
 )
-
-private fun <Configuration : Any, Child : Any> reverseStackItems(
-    stack: ChildStack<Configuration, Child>,
-): List<Created<Configuration, Child>> = stack.items.asReversed()

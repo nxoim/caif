@@ -14,6 +14,8 @@ import com.nxoim.caif.prefabs.stack.RenderOrderStrategy
 import com.nxoim.caif.prefabs.stack.StackCreationContext
 import com.nxoim.caif.prefabs.stack.StackItemPosition
 import com.nxoim.caif.prefabs.stack.StackOrchestrator
+import com.nxoim.caif.prefabs.stack.StackOrder
+import com.nxoim.caif.prefabs.stack.StackTransitionRetentionPolicy
 import com.nxoim.caif.prefabs.stack.defaultStackContextResolver
 import com.nxoim.caif.prefabs.stack.indexOf
 import com.nxoim.caif.prefabs.stack.previousIndexOf
@@ -177,7 +179,7 @@ class StackAnimationTest {
             },
             resolver = specStackResolver,
             maxAffected = Int.MAX_VALUE,
-            renderOrder = RenderOrderStrategy.byStackIndex(),
+            renderOrder = RenderOrderStrategy.byStackIndex(StackOrder.TopmostFirst),
         )
         runCurrent()
         advanceUntilIdle()
@@ -195,6 +197,73 @@ class StackAnimationTest {
         advanceUntilIdle()
 
         assertEquals(listOf("a", "c", "d"), orchestrator.itemsToRender.map { it.first.first })
+    }
+
+    @Test
+    fun givenTopmostLastStack_whenMiddleItemRemoved_thenExitRetainsItsDrawingDepth() = runTest {
+        val stack = mutableStateOf(listOf("bottom", "middle", "top"))
+        val exitCompleted = CompletableDeferred<Unit>()
+        val orchestrator = createTestOrchestrator(
+            scope = backgroundScope,
+            stack = stack,
+            animations = mutableMapOf(),
+            removalDeferred = mapOf("middle" to exitCompleted),
+            policy = AffectedItemsPolicy.fromTop(StackOrder.TopmostLast),
+            renderOrder = RenderOrderStrategy.byStackIndex(StackOrder.TopmostLast),
+        )
+        runCurrent()
+        advanceUntilIdle()
+
+        updateState(stack, listOf("bottom", "top"))
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(listOf("bottom", "middle", "top"), orchestrator.itemsToRender.map { it.first.first })
+
+        exitCompleted.complete(Unit)
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(listOf("bottom", "top"), orchestrator.itemsToRender.map { it.first.first })
+    }
+
+    @Test
+    fun givenTopmostLastStack_whenTopPopped_thenExternalTransitionRetainsItUntilCompletion() = runTest {
+        val order = StackOrder.TopmostLast
+        val stack = mutableStateOf(listOf("bottom", "middle", "top"))
+        val orchestrator = createTestOrchestrator(
+            scope = backgroundScope,
+            stack = stack,
+            animations = mutableMapOf(),
+            policy = AffectedItemsPolicy.fromTop(order),
+            renderOrder = RenderOrderStrategy.byStackIndex(order),
+        )
+        runCurrent()
+        advanceUntilIdle()
+
+        val source = order.topmostItem(orchestrator.targetStackKeys)
+        assertEquals("top", source)
+        val isTransitionRunning = mutableStateOf(true)
+        val registration = orchestrator.registerExternalAnimation("top") { isTransitionRunning.value }
+
+        updateState(stack, listOf("bottom", "middle"))
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals("middle", order.topmostItem(orchestrator.targetStackKeys))
+        assertEquals(
+            setOf("bottom", "middle", "top"),
+            StackTransitionRetentionPolicy.adjacent<String>(order)
+                .retainedKeys(orchestrator.targetStackKeys, source),
+        )
+        assertEquals(listOf("bottom", "middle", "top"), orchestrator.itemsToRender.map { it.first.first })
+
+        updateState(isTransitionRunning, false)
+        runCurrent()
+        advanceUntilIdle()
+
+        assertEquals(listOf("bottom", "middle"), orchestrator.itemsToRender.map { it.first.first })
+        registration.unregister()
     }
 
     @Test
@@ -321,7 +390,7 @@ class StackAnimationTest {
             stack = stack,
             animations = animations,
             maxAffected = 10,
-            policy = AffectedItemsPolicy.fromTop(reversed = true),
+            policy = AffectedItemsPolicy.fromTop(StackOrder.TopmostLast),
         )
 
         updateState(stack, items)
@@ -540,7 +609,8 @@ private fun createTestOrchestrator(
     animations: MutableMap<String, SpecRecordingAnimation>,
     removalDeferred: Map<String, CompletableDeferred<Unit>> = emptyMap(),
     maxAffected: Int = Int.MAX_VALUE,
-    policy: AffectedItemsPolicy<String, String, StackItemPosition> = AffectedItemsPolicy.fromTop(),
+    policy: AffectedItemsPolicy<String, String, StackItemPosition> =
+        AffectedItemsPolicy.fromTop(StackOrder.TopmostLast),
     renderOrder: RenderOrderStrategy<String> = RenderOrderStrategy.insertionOrder(),
 ): StackOrchestrator<String, String, StackItemPosition, StackCreationContext<String>> =
     StackOrchestrator(

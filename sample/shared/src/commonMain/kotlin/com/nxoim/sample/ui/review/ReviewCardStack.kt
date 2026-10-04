@@ -29,7 +29,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import com.nxoim.caif.decompose.SwipeCapabilityDispatcher
-import com.nxoim.caif.prefabs.stack.RenderOrderStrategy
+import com.nxoim.caif.prefabs.stack.StackOrder
 import com.nxoim.caif.prefabs.stack.getOrCreateDispatcher
 import com.nxoim.caif.prefabs.stack.rememberStackAnimatorState
 import com.nxoim.caif.swipeable.SwipeConstraint
@@ -64,10 +64,10 @@ internal fun ReviewCardStack(
 
         val animator = rememberStackAnimatorState(
             stack = pageableState.items,
+            stackOrder = StackOrder.TopmostFirst,
             resolver = resolver,
             factory = { _, _ -> cardAnimation() },
             affectedItemsPolicy = remember { CardAffectedItemsPolicy() },
-            renderOrder = remember { RenderOrderStrategy.byStackIndex() },
         )
         val swipeDispatcher = animator.getOrCreateDispatcher(::SwipeCapabilityDispatcher)
         val density = LocalDensity.current

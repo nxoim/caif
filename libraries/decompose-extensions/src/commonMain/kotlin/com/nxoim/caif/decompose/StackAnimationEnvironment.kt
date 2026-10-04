@@ -56,6 +56,10 @@ data class StackAnimationContext(
     val environment: StackAnimationEnvironment,
 )
 
+/**
+ * Expects Decompose's topmost-last stack order.
+ * Positions measure depth from the top.
+ */
 fun <ItemType> stackAnimationContextFactory(
     environment: () -> StackAnimationEnvironment
 ): ContextFactory<ItemType, StackAnimationContext, StackCreationContext<ItemType>> =
@@ -64,8 +68,10 @@ fun <ItemType> stackAnimationContextFactory(
             AppearanceIntention.Entrance -> StackItemPosition.PreEntered
             AppearanceIntention.Removal -> StackItemPosition.Removed
             AppearanceIntention.Movement -> StackItemPosition.Inside(
-                index = indexOf(item),
-                previousIndex = previousIndexOf(item),
+                index = stackSnapshot.lastIndex - indexOf(item),
+                previousIndex = previousSnapshot?.let { previous ->
+                    previousIndexOf(item)?.let { previous.lastIndex - it }
+                },
             )
         }
         StackAnimationContext(

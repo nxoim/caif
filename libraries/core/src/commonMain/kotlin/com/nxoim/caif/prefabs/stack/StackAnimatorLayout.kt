@@ -21,7 +21,8 @@ import androidx.compose.ui.util.fastForEach
 
 
 /**
- * Renders stack items with an [AnimatedVisibilityScope] derived from the topmost stack item.
+ * Renders stack items with an [AnimatedVisibilityScope]
+ * and adjacent retention derived from [StackAnimatorState.stackOrder].
  *
  * This layout automatically creates the root top-item transition, derives the keys retained by
  * [retentionPolicy], and exposes each item's [AnimatedVisibilityScope]. Nested stack animators
@@ -31,13 +32,14 @@ import androidx.compose.ui.util.fastForEach
 fun <ItemType : Any, Key : Any, Context> StackAnimatorLayout(
     animator: StackAnimatorState<ItemType, Key, Context>,
     modifier: Modifier = Modifier,
-    retentionPolicy: StackTransitionRetentionPolicy<Key> = StackTransitionRetentionPolicy.adjacent(),
+    retentionPolicy: StackTransitionRetentionPolicy<Key> =
+        remember(animator.stackOrder) { StackTransitionRetentionPolicy.adjacent(animator.stackOrder) },
     parentAnimatedVisibilityScope: AnimatedVisibilityScope? = LocalStackAnimatedVisibilityScope.current,
     content: @Composable AnimatedVisibilityScope.(Key, ItemType) -> Unit
 ) {
     val stackKeys = animator.targetStackKeys
     val transition = updateTransition(
-        targetState = stackKeys.firstOrNull(),
+        targetState = animator.stackOrder.topmostItem(stackKeys),
         label = "Topmost stack item"
     )
     val retainedKeys = retentionPolicy.retainedKeys(
@@ -171,13 +173,24 @@ fun interface StackTransitionRetentionPolicy<Key : Any> {
 
     companion object {
         /**
-         * Retains the top item, the item beneath it, and the latest removed transition source.
+         * Retains adjacent topmost keys according to [stackOrder],
+         * plus a removed transition source.
          */
-        fun <Key : Any> adjacent(): StackTransitionRetentionPolicy<Key> =
+        fun <Key : Any> adjacent(
+            stackOrder: StackOrder = StackOrder.TopmostLast
+        ): StackTransitionRetentionPolicy<Key> =
             StackTransitionRetentionPolicy { stack, transitionSource ->
                 buildSet(3) {
-                    stack.firstOrNull()?.let(::add)
-                    stack.getOrNull(1)?.let(::add)
+                    val topIndex = when (stackOrder) {
+                        StackOrder.TopmostFirst -> 0
+                        StackOrder.TopmostLast -> stack.lastIndex
+                    }
+                    val adjacentIndex = when (stackOrder) {
+                        StackOrder.TopmostFirst -> 1
+                        StackOrder.TopmostLast -> stack.lastIndex - 1
+                    }
+                    stack.getOrNull(topIndex)?.let(::add)
+                    stack.getOrNull(adjacentIndex)?.let(::add)
                     if (transitionSource != null && transitionSource !in stack) {
                         add(transitionSource)
                     }
