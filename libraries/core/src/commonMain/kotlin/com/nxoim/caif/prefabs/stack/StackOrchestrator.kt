@@ -2,7 +2,6 @@
 
 package com.nxoim.caif.prefabs.stack
 
-import androidx.collection.MutableScatterMap
 import androidx.collection.MutableScatterSet
 import androidx.collection.mutableScatterMapOf
 import androidx.collection.toMutableScatterMap
@@ -97,11 +96,12 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
     ): Map<Any, T?> {
         val affected = startCycle(stack.value, capabilityType = kClass)
             .also { capabilityCycleOpen = true }
-        val result = MutableScatterMap<Any, T?>(affected.size)
-        affected.forEach { affectedItem ->
-            result[affectedItem] = registry.get(affectedItem)?.getAndSelectCapability(kClass)
+
+        return buildMap(affected.size) {
+            affected.forEach { affectedItem ->
+                put(affectedItem, registry.get(affectedItem)?.getAndSelectCapability(kClass))
+            }
         }
-        return result.asMap()
     }
 
     override fun isCycleActive(id: Long) = capabilityCycleOpen && id == activeCycleId
