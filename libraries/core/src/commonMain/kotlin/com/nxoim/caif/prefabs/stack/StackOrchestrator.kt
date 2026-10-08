@@ -15,8 +15,8 @@ import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
 import androidx.compose.ui.util.fastMap
+import com.nxoim.caif.core.DeclaredItemAnimation
 import com.nxoim.caif.core.ItemAnimation
-import com.nxoim.caif.core.SelectableItemAnimation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -45,19 +45,16 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
     var lastStackActedUpon = emptyList<ItemType>()
         private set
 
-    // job insertion history is observable through
+    // entries retain rendered items, including visible items whose
+    // jobs have completed. insertion order is observed by
     // RenderOrderStrategy.insertionOrder().
-    private val activeAnimationJobs = mutableMapOf<Key, Job>()
+    private val renderJobs = mutableMapOf<Key, Job>()
 
     private var keysCurrentlyAffectedByCycle = emptySet<Key>()
     private var activeCycleId = 0L
     private var capabilityCycleOpen = false
     private var retainedRenderOrder = emptyList<Key>()
-    private val itemCache = mutableScatterMapOf<Key, ItemType>().apply {
-        cycleState.stack.currentKeyMap.forEach { (item, key) ->
-            this[key] = item
-        }
-    }
+    private val itemCache = mutableScatterMapOf<Key, ItemType>()
 
     var itemsToRender by mutableStateOf(emptyList<Pair<Pair<Key, ItemType>, ItemAnimation<Context>>>())
         private set
@@ -85,17 +82,7 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
             }
     }
 
-    internal fun dispose() {
-        observationJob.cancel()
-        // cancellation can synchronously resume jobs that remove
-        // themselves from this map
-        activeAnimationJobs.toMutableScatterMap().forEachValue(Job::cancel)
-        activeAnimationJobs.clear()
-        itemsToRender = emptyList()
-        externalAnimations.clear()
-        registry.clear()
-        itemCache.clear()
-    }
+    override val currentCycleId get() = activeCycleId
 
     fun registerExternalAnimation(
         key: Key,
@@ -104,130 +91,6 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
 
     fun startCycle(stackSnapshot: List<ItemType>): Set<Key> =
         startCycle(stackSnapshot, capabilityType = null)
-
-    private fun startCycle(
-        stackSnapshot: List<ItemType>,
-        capabilityType: KClass<*>?
-    ): Set<Key> {
-        val stackBeforeCycle = cycleState.stack.current
-        val keysBeforeCycle = cycleState.stack.currentKeys
-        val itemsAndKeysBeforeCycle = cycleState.stack.currentKeyMap
-        capabilityCycleOpen = false
-        activeCycleId++
-        // prepare new entering items as PreEntered on Frame 0
-        cycleState.push(
-            stackSnapshot,
-            treatNewEnteringAsPreparing = true,
-            recalculateEnteringToMoving = false
-        )
-        stackBeforeCycle.fastForEach { item ->
-            val key = itemsAndKeysBeforeCycle[item]
-                ?: error("No key for item before cycle item cache building")
-            itemCache[key] = item
-        }
-        val currentStack = cycleState.stack.current
-        val currentItemsAndKeys = cycleState.stack.currentKeyMap
-        currentStack.fastForEach { item ->
-            val key = currentItemsAndKeys[item]
-                ?: error("No key for item during item cache building")
-            itemCache[key] = item
-        }
-
-        lastStackActedUpon = cycleState.stack.current
-
-        val keysParticipatingInThisCycle = MutableScatterSet<Key>(
-            keysBeforeCycle.size + cycleState.stack.currentKeys.size
-        ).apply {
-            keysBeforeCycle.forEach(::add)
-            cycleState.stack.currentKeys.forEach(::add)
-        }
-
-        fun animationFor(key: Key): ItemAnimation<Context> =
-            registry.getOrCreate(requireNotNull(itemCache[key]), key) {
-                cycleState.context.current[key]!!
-            }.also {
-                if (key in keysParticipatingInThisCycle) {
-                    it.selectForCycle(capabilityType)
-                }
-            }
-
-        // limit active animation work to items within the visible viewport bounds,
-        // or whatever other visibility conditions the animations report
-        val affectedItems = affectedItemsPolicy.selectAffectedItems(
-            cycleState.stack.current,
-            keys = cycleState.stack.currentKeyMap,
-            isVisible = { key, context -> animationFor(key).willBeVisible(context) },
-            currentContexts = cycleState.context.current,
-            targetContexts = cycleState.settledContexts(),
-            previousContexts = cycleState.context.previous,
-            maxAffected = maxAffected,
-            minAffected = 2
-        )
-        affectedItems.forEach(::animationFor)
-        val invisibleRemoved = invisibleRemovedItems(
-            currentStackKeys = cycleState.stack.currentKeys,
-            currentContexts = cycleState.context.current,
-            previousContexts = cycleState.context.previous,
-            currentAnimations = registry.animations
-        )
-        val newAffected = LinkedHashSet<Key>(affectedItems.size).apply {
-            affectedItems.forEach { if (it !in invisibleRemoved) add(it) }
-        }
-        val removedWithoutNewAnimation = MutableScatterSet<Key>().apply {
-            cycleState.context.current.keys.forEach { key ->
-                if (key !in cycleState.stack.currentKeys && key !in newAffected) add(key)
-            }
-        }
-
-        // items removed without any active or required animation
-        // can be removed immediately
-        val immediatelyEvicted = MutableScatterSet<Key>().apply {
-            removedWithoutNewAnimation.forEach { key ->
-                if (activeAnimationJobs[key]?.isActive != true) add(key)
-            }
-        }
-
-        // cancel previous running jobs for items moving or reentering
-        // in this cycle
-        val jobsToCancel = mutableListOf<Job>()
-        immediatelyEvicted.forEach { key ->
-            activeAnimationJobs.remove(key)?.let(jobsToCancel::add)
-        }
-        newAffected.forEach { key ->
-            activeAnimationJobs.put(key, Job())?.let(jobsToCancel::add)
-        }
-        jobsToCancel.fastForEach(Job::cancel)
-        immediatelyEvicted.forEach { key ->
-            registry.evict(key)
-            itemCache -= key
-        }
-        updateItemsToRender()
-
-        keysCurrentlyAffectedByCycle = newAffected
-        return newAffected
-    }
-
-    private fun invisibleRemovedItems(
-        currentStackKeys: Iterable<Key>,
-        currentContexts: Map<Key, Context>,
-        previousContexts: Map<Key, Context>,
-        currentAnimations: Map<Key, ItemAnimation<Context>>
-    ): Set<Key> {
-        val result = MutableScatterSet<Key>()
-        currentContexts.forEach { (key, currentContext) ->
-            if (key !in currentStackKeys) {
-                val animation = currentAnimations[key]
-                val previousContext = previousContexts[key]
-                if (animation != null && previousContext != null &&
-                    !animation.willBeVisible(previousContext) &&
-                    !animation.willBeVisible(currentContext)
-                ) {
-                    result.add(key)
-                }
-            }
-        }
-        return result.asSet()
-    }
 
     override fun <T : Any> startCycle(
         kClass: KClass<T>
@@ -241,8 +104,6 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
         return result.asMap()
     }
 
-    override val currentCycleId get() = activeCycleId
-
     override fun isCycleActive(id: Long) = capabilityCycleOpen && id == activeCycleId
 
     override fun progressCycle(id: Long) {
@@ -254,91 +115,9 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
 
     override fun progressCycle() = progressCycle(reuseSettledResolution = false)
 
-    private fun progressCycle(reuseSettledResolution: Boolean) {
-        val needsStackUpdate = cycleState.stack.current != stack.value
-        if (needsStackUpdate) {
-            cycleState.push(
-                stack.value,
-                treatNewEnteringAsPreparing = false,
-                recalculateEnteringToMoving = true
-            )
-        } else {
-            if (reuseSettledResolution)
-                cycleState.progressUsingSettledResolution()
-            else
-                cycleState.progress()
-        }
-
-        if (needsStackUpdate) updateItemsToRender()
-
-        val currentStackSnapshot = cycleState.stack.current
-        val currentContextsSnapshot = cycleState.context.current
-
-        // safe check. only one active animation job per item exists at any time
-        fun existsCurrently(key: Key): Boolean = key in cycleState.stack.currentKeys
-
-        lastStackActedUpon = currentStackSnapshot
-
-        val affectedKeysSnapshot = keysCurrentlyAffectedByCycle
-
-        val jobsToCancel = mutableListOf<Job>()
-        val jobsToStart = mutableListOf<Job>()
-        affectedKeysSnapshot.forEach { key ->
-            val animation = registry.get(key)
-            val currentContext = currentContextsSnapshot[key]
-
-            if (animation == null || currentContext == null) {
-                activeAnimationJobs.remove(key)?.let(jobsToCancel::add)
-            } else {
-                val job = scope.launch(start = CoroutineStart.LAZY) {
-                    try {
-                        animation.animateTo(currentContext)
-                        // wait for any registered external observers, like shared element transitions
-                        externalAnimations.awaitIdle(key)
-                    } finally {
-                        val exists = existsCurrently(key)
-                        val ownJob = currentCoroutineContext()[Job]
-
-                        // if a rapid mutation started a newer cycle,
-                        // activeAnimationJobs[key] will point to a newer job.
-                        // we only evict if this coroutine still has the still
-                        // the ownership of the key
-                        if (activeAnimationJobs[key] === ownJob) {
-                            // keep items in render tree if they declare themselves visible
-                            if (!animation.willBeVisible(currentContext) || !exists) {
-                                activeAnimationJobs.remove(key)
-                                updateItemsToRender()
-                            }
-
-                            if (!exists) {
-                                registry.evict(key)
-                                itemCache -= key
-                            }
-                        }
-                    }
-                }
-                activeAnimationJobs.put(key, job)?.let(jobsToCancel::add)
-                jobsToStart += job
-            }
-        }
-
-        jobsToCancel.fastForEach(Job::cancel)
-        jobsToStart.fastForEach(Job::start)
-
-        if (jobsToStart.size != affectedKeysSnapshot.size) {
-            updateItemsToRender()
-        }
-    }
-
     fun updateItemsToRender() {
-        cycleState.stack.current.fastForEach { item ->
-            val key = cycleState.stack.currentKeyMap[item]
-                ?: error("No key for item during item cache building")
-            itemCache[key] = item
-        }
-
         val currentKeysInOrder = cycleState.stack.currentKeysInOrder
-        val activeKeys = activeAnimationJobs.keys
+        val activeKeys = renderJobs.keys
         retainedRenderOrder = retainRemovedKeyPositions(
             currentKeys = currentKeysInOrder,
             currentKeySet = cycleState.stack.currentKeys,
@@ -354,6 +133,222 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
             val item = itemCache[key]!!
             val animation = registry.get(key)!!
             (key to item) to animation
+        }
+    }
+
+    internal fun dispose() {
+        observationJob.cancel()
+        // cancellation can synchronously resume jobs that remove
+        // themselves from this map
+        renderJobs.toMutableScatterMap().forEachValue(Job::cancel)
+        renderJobs.clear()
+        itemsToRender = emptyList()
+        externalAnimations.clear()
+        registry.clear()
+        itemCache.clear()
+    }
+
+    private fun startCycle(
+        stackSnapshot: List<ItemType>,
+        capabilityType: KClass<*>?
+    ): Set<Key> {
+        registry.beginCycle()
+        val keysBeforeCycle = cycleState.stack.currentKeys
+        val itemsAndKeysBeforeCycle = cycleState.stack.currentKeyMap
+        capabilityCycleOpen = false
+        activeCycleId++
+        // prepare new entering items as PreEntered on Frame 0
+        cycleState.push(
+            stackSnapshot,
+            treatNewEnteringAsPreparing = true,
+            recalculateEnteringToMoving = false
+        )
+        cacheItems(itemsAndKeysBeforeCycle)
+        val currentStack = cycleState.stack.current
+        val currentItemsAndKeys = cycleState.stack.currentKeyMap
+        val currentKeys = cycleState.stack.currentKeys
+        cacheItems(currentItemsAndKeys)
+
+        lastStackActedUpon = cycleState.stack.current
+
+        val sharedDefinitions = registry.sourceItem(capabilityType, currentStack)?.let { source ->
+            val sourceKey = currentItemsAndKeys[source]
+            require(sourceKey != null) {
+                "The animation selection source must belong to the target stack snapshot."
+            }
+            val animation = registry.getOrCreateDeclared(source, sourceKey) {
+                cycleState.context.current.getValue(sourceKey)
+            }
+            require(animation.definitions.supportsSharedSelection) {
+                "Shared selection requires a factory built with buildAnimationFactory."
+            }
+            animation.definitions
+        }
+        val sharedDefinition = sharedDefinitions?.forInput(capabilityType)
+
+        fun animationFor(key: Key): DeclaredItemAnimation<Context> =
+            registry.getOrCreateDeclared(requireNotNull(itemCache[key]), key) {
+                cycleState.context.current[key]!!
+            }.also {
+                if (key in keysBeforeCycle || key in currentKeys) {
+                    it.select(
+                        sharedDefinition ?: it.definitionFor(capabilityType),
+                        sharedDefinitions ?: it.definitions,
+                    )
+                }
+            }
+
+        renderJobs.keys.forEach { key ->
+            if (key in keysBeforeCycle || key in currentKeys) animationFor(key)
+        }
+
+        val settledContexts = cycleState.settledContexts()
+        // limit active animation work to items within the visible viewport bounds,
+        // or whatever other visibility conditions the animations report
+        val affectedItems = affectedItemsPolicy.selectAffectedItems(
+            cycleState.stack.current,
+            keys = cycleState.stack.currentKeyMap,
+            isVisible = { key, context -> animationFor(key).willBeVisible(context) },
+            currentContexts = cycleState.context.current,
+            targetContexts = settledContexts,
+            previousContexts = cycleState.context.previous,
+            maxAffected = maxAffected,
+            minAffected = 2
+        )
+        affectedItems.forEach(::animationFor)
+        val newAffected = LinkedHashSet(affectedItems)
+        val previousContexts = cycleState.context.previous
+        cycleState.context.current.forEach { (key, currentContext) ->
+            if (key !in currentKeys) {
+                val animation = registry.get(key)
+                val previousContext = previousContexts[key]
+                if (animation != null && previousContext != null &&
+                    !animation.willBeVisible(previousContext) && !animation.willBeVisible(currentContext)
+                ) {
+                    newAffected.remove(key)
+                }
+            }
+        }
+
+        // items removed without any active or required animation
+        // can be removed immediately
+        val immediatelyEvicted = MutableScatterSet<Key>().apply {
+            cycleState.context.current.keys.forEach { key ->
+                if (key !in currentKeys && key !in newAffected && renderJobs[key]?.isActive != true) add(key)
+            }
+        }
+
+        // cancel previous running jobs for items moving or reentering
+        // in this cycle
+        val jobsToCancel = mutableListOf<Job>()
+        immediatelyEvicted.forEach { key ->
+            renderJobs.remove(key)?.let(jobsToCancel::add)
+        }
+        newAffected.forEach { key ->
+            renderJobs.put(key, Job())?.let(jobsToCancel::add)
+        }
+        jobsToCancel.fastForEach(Job::cancel)
+        immediatelyEvicted.forEach { key ->
+            registry.evict(key)
+            itemCache -= key
+        }
+        val hiddenCompletedKeys = renderJobs.filter { (key, job) ->
+            key in cycleState.stack.currentKeys && key !in newAffected && !job.isActive &&
+                settledContexts[key]?.let { registry.get(key)?.willBeVisible(it) == false } == true
+        }.keys
+
+        hiddenCompletedKeys.forEach { key ->
+            if (externalAnimations.isRunning(key)) {
+                // a shared transition may still retain the view
+                val job = createRenderJob(key)
+                renderJobs[key] = job
+                job.start()
+            } else {
+                renderJobs.remove(key)
+            }
+        }
+        updateItemsToRender()
+
+        keysCurrentlyAffectedByCycle = newAffected
+        return newAffected
+    }
+
+    private fun progressCycle(reuseSettledResolution: Boolean) {
+        val needsStackUpdate = cycleState.stack.current != stack.value
+        if (needsStackUpdate) {
+            cycleState.push(
+                stack.value,
+                treatNewEnteringAsPreparing = false,
+                recalculateEnteringToMoving = true
+            )
+            cacheItems(cycleState.stack.currentKeyMap)
+        } else if (reuseSettledResolution) {
+            cycleState.progressUsingSettledResolution()
+        } else {
+            cycleState.progress()
+        }
+
+        if (needsStackUpdate) updateItemsToRender()
+
+        val currentStackSnapshot = cycleState.stack.current
+        val currentContextsSnapshot = cycleState.context.current
+
+        lastStackActedUpon = currentStackSnapshot
+
+        val affectedKeysSnapshot = keysCurrentlyAffectedByCycle
+
+        val jobsToCancel = mutableListOf<Job>()
+        val jobsToStart = mutableListOf<Job>()
+        affectedKeysSnapshot.forEach { key ->
+            val animation = registry.get(key)
+            val currentContext = currentContextsSnapshot[key]
+
+            if (animation == null || currentContext == null) {
+                renderJobs.remove(key)?.let(jobsToCancel::add)
+            } else {
+                val job = createRenderJob(key) { animation.animateTo(currentContext) }
+                renderJobs.put(key, job)?.let(jobsToCancel::add)
+                jobsToStart += job
+            }
+        }
+
+        jobsToCancel.fastForEach(Job::cancel)
+        jobsToStart.fastForEach(Job::start)
+
+        if (jobsToStart.size != affectedKeysSnapshot.size) {
+            updateItemsToRender()
+        }
+    }
+
+    private fun cacheItems(itemsAndKeys: Map<ItemType, Key>) {
+        itemsAndKeys.forEach { (item, key) -> itemCache[key] = item }
+    }
+
+    private fun createRenderJob(key: Key, animate: suspend () -> Unit = {}): Job =
+        // jobs start after registration so cleanup can check ownership
+        scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                animate()
+                externalAnimations.awaitIdle(key)
+            } finally {
+                finishRendering(key)
+            }
+        }
+
+    private suspend fun finishRendering(key: Key) {
+        // cleanup belongs to the job currently registered for this key.
+        if (renderJobs[key] !== currentCoroutineContext()[Job]) return
+        val exists = key in cycleState.stack.currentKeys
+        val context = cycleState.context.current[key]
+
+        if (!exists || context == null || registry.get(key)?.willBeVisible(context) == false) {
+            renderJobs.remove(key)
+            updateItemsToRender()
+        }
+
+        if (!exists) {
+            registry.evict(key)
+            itemCache -= key
         }
     }
 
@@ -380,10 +375,8 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
         val result = MutableList<Key?>(currentKeys.size + retained.size) { null }
         val lastIndex = result.lastIndex
         val overflow = mutableListOf<Key>()
-        val previousIndices = MutableScatterMap<Key, Int>(previousOrder.size)
-        previousOrder.fastForEachIndexed { index, key -> previousIndices[key] = index }
-        retained.fastForEach { key ->
-            val previousIndex = previousIndices[key]!!
+        previousOrder.fastForEachIndexed { previousIndex, key ->
+            if (key in currentKeySet || key !in activeKeys) return@fastForEachIndexed
             if (previousIndex <= lastIndex && result[previousIndex] == null) {
                 result[previousIndex] = key
             } else {
@@ -413,14 +406,4 @@ private fun <Key : Any> List<Key>.containsExactly(activeKeys: Set<Key>): Boolean
         if (!remainingKeys.remove(key)) return false
     }
     return remainingKeys.size == 0
-}
-
-@Suppress("UNCHECKED_CAST")
-private fun <Context> ItemAnimation<Context>.selectForCycle(capabilityType: KClass<*>?) {
-    val selectable = this as? SelectableItemAnimation<Context> ?: return
-    if (capabilityType == null) {
-        selectable.selectDefaultAnimation()
-    } else {
-        selectable.selectAnimationForCapability(capabilityType)
-    }
 }

@@ -28,12 +28,10 @@ internal class ExternalAnimationRegistry<Key : Any> {
         }
     }
 
+    fun isRunning(key: Key): Boolean = animations.values.any { it.key == key && it.isRunning() }
+
     suspend fun awaitIdle(key: Key) {
-        snapshotFlow {
-            animations.values.none { animation ->
-                animation.key == key && animation.isRunning()
-            }
-        }.first { isIdle -> isIdle }
+        snapshotFlow { !isRunning(key) }.first { it }
     }
 
     fun clear() {

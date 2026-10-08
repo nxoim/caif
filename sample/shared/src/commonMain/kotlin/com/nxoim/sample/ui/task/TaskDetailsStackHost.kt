@@ -12,19 +12,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.nxoim.caif.decompose.CupertinoStackAnimation
 import com.nxoim.caif.decompose.DecomposeStack
-import com.nxoim.caif.decompose.adaptiveStackAnimation
-import com.nxoim.caif.decompose.decomposeAnimations
+import com.nxoim.caif.decompose.decomposeStackAnimations
 import com.nxoim.evolpagink.compose.toState
 import com.nxoim.evolpagink.core.Pageable
 import com.nxoim.sample.model.KanbanNote
 import com.nxoim.sample.model.KanbanTask
 import com.nxoim.sample.ui.common.ErrorState
+import com.nxoim.sample.ui.common.ExpansionSwipeStackAnimation
 import com.nxoim.sample.ui.common.LoadState
 import com.nxoim.sample.ui.common.LoadingState
 import com.nxoim.sample.ui.common.NotFoundState
 import com.nxoim.sample.ui.common.SharedElementKeyFactory
-import com.nxoim.sample.ui.common.expansionSwipeStackAnimation
 import com.nxoim.sample.ui.common.sharedtransition.LocalAnimatedVisibilityScope
 import com.nxoim.sample.ui.common.sharedtransition.LocalSharedElementsEnabled
 import com.nxoim.sample.ui.common.sharedtransition.sharedBounds
@@ -57,15 +57,17 @@ internal fun TaskDetailsStackHost(
                     backHandler = component.backHandler,
                     onPop = component.navigation::navigateBack,
                     animationFactory = remember(useSharedElements) {
-                        decomposeAnimations { child ->
-                            when (child) {
-                                TaskChild.Details -> adaptiveStackAnimation()
-                                is TaskChild.Note -> if (useSharedElements)
-                                    expansionSwipeStackAnimation()
-                                else
-                                    adaptiveStackAnimation()
+                        decomposeStackAnimations(
+                            swipe = { _, child ->
+                                when (child) {
+                                    TaskChild.Details -> CupertinoStackAnimation()
+                                    is TaskChild.Note -> if (useSharedElements)
+                                        ExpansionSwipeStackAnimation()
+                                    else
+                                        CupertinoStackAnimation()
+                                }
                             }
-                        }
+                        )
                     },
                 ) { child ->
                     CompositionLocalProvider(LocalAnimatedVisibilityScope provides this) {

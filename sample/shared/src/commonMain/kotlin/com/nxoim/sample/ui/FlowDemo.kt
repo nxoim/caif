@@ -11,13 +11,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.nxoim.caif.decompose.CupertinoStackAnimation
 import com.nxoim.caif.decompose.DecomposeStack
-import com.nxoim.caif.decompose.adaptiveStackAnimation
-import com.nxoim.caif.decompose.decomposeAnimations
+import com.nxoim.caif.decompose.decomposeStackAnimations
 import com.nxoim.sample.ui.board.BoardScreen
 import com.nxoim.sample.ui.category.CategoryStackHost
+import com.nxoim.sample.ui.common.ExpansionSwipeStackAnimation
 import com.nxoim.sample.ui.common.FlowSharedElementKeys
-import com.nxoim.sample.ui.common.expansionSwipeStackAnimation
 import com.nxoim.sample.ui.common.inspector.DebugPopover
 import com.nxoim.sample.ui.common.sharedtransition.LocalAnimatedVisibilityScope
 import com.nxoim.sample.ui.common.sharedtransition.LocalSharedElementsEnabled
@@ -43,17 +43,19 @@ internal fun FlowDemo(
                     backHandler = component.backHandler,
                     onPop = component.navigation::navigateBack,
                     animationFactory = remember(useSharedElements) {
-                        decomposeAnimations { child ->
-                            when (child) {
-                                is FlowChild.Board -> adaptiveStackAnimation()
-                                is FlowChild.Category,
-                                is FlowChild.TaskDetails,
-                                is FlowChild.TaskComposer -> if (useSharedElements)
-                                    expansionSwipeStackAnimation()
-                                else
-                                    adaptiveStackAnimation()
-                            }
-                        }
+                        decomposeStackAnimations(
+                            swipe = { _, child ->
+                                when (child) {
+                                    is FlowChild.Board -> CupertinoStackAnimation()
+                                    is FlowChild.Category,
+                                    is FlowChild.TaskDetails,
+                                    is FlowChild.TaskComposer -> if (useSharedElements)
+                                        ExpansionSwipeStackAnimation()
+                                    else
+                                        CupertinoStackAnimation()
+                                }
+                            },
+                        )
                     },
                 ) { child ->
                     CompositionLocalProvider(LocalAnimatedVisibilityScope provides this) {

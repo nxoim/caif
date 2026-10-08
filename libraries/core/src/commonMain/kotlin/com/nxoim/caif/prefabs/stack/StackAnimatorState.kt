@@ -93,76 +93,6 @@ fun <ItemType, Key : Any, Context> rememberStackAnimatorState(
     renderOrder = renderOrder
 )
 
-fun <Context, ItemType, Key : Any> defaultStackContextResolver(
-    contextFactory: ContextFactory<ItemType, Context, StackCreationContext<ItemType>>,
-    keyFor: (ItemType) -> Key
-): ContextResolver<ItemType, Key, Context, StackCreationContext<ItemType>> =
-    object :
-        ContextResolver<ItemType, Key, Context, StackCreationContext<ItemType>> {
-        override fun keyFor(itemType: ItemType): Key = keyFor(itemType)
-
-        override fun buildContexts(
-            stack: List<ItemType>,
-            previousStack: List<ItemType>?,
-            treatNewEnteringAsPreparing: Boolean,
-            recalculateEnteringToMoving: Boolean,
-            previousContexts: Map<Key, Context>?
-        ): Map<Key, Pair<Context, StackCreationContext<ItemType>>> {
-            val previousKeys = previousStack?.let { MutableScatterSet<Key>(it.size) }
-            val currentKeys = MutableScatterSet<Key>(stack.size)
-            val itemsByKey = LinkedHashMap<Key, ItemType>(
-                (previousStack?.size ?: 0) + stack.size
-            )
-            previousStack?.fastForEach { item ->
-                val key = keyFor(item)
-                previousKeys?.add(key)
-                itemsByKey[key] = item
-            }
-            stack.fastForEach { item ->
-                val key = keyFor(item)
-                currentKeys.add(key)
-                itemsByKey[key] = item
-            }
-
-            val indexLookup = StackCreationContextIndexLookup(stack, previousStack)
-            val result =
-                LinkedHashMap<Key, Pair<Context, StackCreationContext<ItemType>>>(itemsByKey.size)
-            itemsByKey.forEach { (key, item) ->
-                val isInPrevious = previousKeys?.contains(key) == true
-                val isInCurrent = key in currentKeys
-
-                val intention = when {
-                    !isInCurrent -> AppearanceIntention.Removal
-                    treatNewEnteringAsPreparing && !isInPrevious -> AppearanceIntention.Entrance
-                    else -> AppearanceIntention.Movement
-                }
-
-                val creationContext = StackCreationContext(
-                    stackSnapshot = stack,
-                    previousSnapshot = previousStack,
-                    intention = intention
-                ).apply { installIndexLookup(indexLookup) }
-                result[key] = contextFactory.create(creationContext, item) to creationContext
-            }
-            return result
-        }
-    }
-
-@Composable
-private fun <Context, ItemType, Key : Any> rememberStackContextResolver(
-    contextFactory: ContextFactory<ItemType, Context, StackCreationContext<ItemType>>,
-    keyFor: (ItemType) -> Key
-): ContextResolver<ItemType, Key, Context, StackCreationContext<ItemType>> {
-    val currentContextFactory = rememberUpdatedState(contextFactory)
-    val currentKeyFor = rememberUpdatedState(keyFor)
-    return remember {
-        defaultStackContextResolver(
-            contextFactory = { item -> currentContextFactory.value.create(this, item) },
-            keyFor = { item -> currentKeyFor.value(item) }
-        )
-    }
-}
-
 @Composable
 fun <ItemType, Key : Any, Context, CreationContext> rememberStackAnimatorState(
     stack: State<List<ItemType>>,
@@ -183,28 +113,9 @@ fun <ItemType, Key : Any, Context, CreationContext> rememberStackAnimatorState(
     val currentRenderOrder = rememberUpdatedState(renderOrder)
 
     val state = remember(stack, maxAffected, scope, stackOrder) {
-        val registry = ItemAnimationRegistry<ItemType, Key, Context> { item, key ->
-            currentFactory.value.create(item, key)
-        }
-        val delegatingResolver = object : ContextResolver<ItemType, Key, Context, CreationContext> {
-            override fun keyFor(itemType: ItemType): Key =
-                currentResolver.value.keyFor(itemType)
+        val registry = ItemAnimationRegistry.fromProvider { currentFactory.value }
+        val delegatingResolver = DelegatingContextResolver { currentResolver.value }
 
-            override fun buildContexts(
-                stack: List<ItemType>,
-                previousStack: List<ItemType>?,
-                treatNewEnteringAsPreparing: Boolean,
-                recalculateEnteringToMoving: Boolean,
-                previousContexts: Map<Key, Context>?
-            ): Map<Key, Pair<Context, CreationContext>> =
-                currentResolver.value.buildContexts(
-                    stack,
-                    previousStack,
-                    treatNewEnteringAsPreparing,
-                    recalculateEnteringToMoving,
-                    previousContexts
-                )
-        }
         val orchestrator = StackOrchestrator(
             scope = scope,
             stack = stack,
@@ -227,10 +138,6 @@ fun <ItemType, Key : Any, Context, CreationContext> rememberStackAnimatorState(
     }
     return state
 }
-
-inline fun <reified D : CapabilityDispatcher> StackAnimatorState<*, *, *>.getOrCreateDispatcher(
-    noinline factory: (StackCycleController) -> D
-): D = getOrCreateDispatcher(kClass = D::class, factory)
 
 interface StackAnimatorState<ItemType, Key : Any, Context> {
     /**
@@ -263,6 +170,16 @@ interface StackAnimatorState<ItemType, Key : Any, Context> {
     val targetStackKeys: List<Key>
 }
 
+inline fun <reified D : CapabilityDispatcher> StackAnimatorState<*, *, *>.getOrCreateDispatcher(
+    noinline factory: (StackCycleController) -> D
+): D = getOrCreateDispatcher(kClass = D::class, factory)
+
+fun <Context, ItemType, Key : Any> defaultStackContextResolver(
+    contextFactory: ContextFactory<ItemType, Context, StackCreationContext<ItemType>>,
+    keyFor: (ItemType) -> Key
+): ContextResolver<ItemType, Key, Context, StackCreationContext<ItemType>> =
+    DefaultStackContextResolver(contextFactory, keyFor)
+
 class StackAnimatorStateImpl<ItemType, Key : Any, Context, CreationContext>(
     private val orchestrator: StackOrchestrator<ItemType, Key, Context, CreationContext>,
     override val stackOrder: StackOrder = StackOrder.TopmostLast,
@@ -282,4 +199,94 @@ class StackAnimatorStateImpl<ItemType, Key : Any, Context, CreationContext>(
     ): ExternalAnimationRegistration = orchestrator.registerExternalAnimation(key, isRunning)
 
     internal fun dispose() = orchestrator.dispose()
+}
+
+@Composable
+private fun <Context, ItemType, Key : Any> rememberStackContextResolver(
+    contextFactory: ContextFactory<ItemType, Context, StackCreationContext<ItemType>>,
+    keyFor: (ItemType) -> Key
+): ContextResolver<ItemType, Key, Context, StackCreationContext<ItemType>> {
+    val currentContextFactory = rememberUpdatedState(contextFactory)
+    val currentKeyFor = rememberUpdatedState(keyFor)
+
+    return remember {
+        defaultStackContextResolver(
+            contextFactory = { item -> currentContextFactory.value.create(this, item) },
+            keyFor = { item -> currentKeyFor.value(item) }
+        )
+    }
+}
+
+private class DefaultStackContextResolver<ItemType, Key : Any, Context>(
+    private val contextFactory: ContextFactory<ItemType, Context, StackCreationContext<ItemType>>,
+    private val keyForItem: (ItemType) -> Key,
+) : ContextResolver<ItemType, Key, Context, StackCreationContext<ItemType>> {
+    override fun keyFor(itemType: ItemType): Key = keyForItem(itemType)
+
+    override fun buildContexts(
+        stack: List<ItemType>,
+        previousStack: List<ItemType>?,
+        treatNewEnteringAsPreparing: Boolean,
+        recalculateEnteringToMoving: Boolean,
+        previousContexts: Map<Key, Context>?
+    ): Map<Key, Pair<Context, StackCreationContext<ItemType>>> {
+        val previousKeys = previousStack?.let { MutableScatterSet<Key>(it.size) }
+        val currentKeys = MutableScatterSet<Key>(stack.size)
+        val itemsByKey = LinkedHashMap<Key, ItemType>(
+            (previousStack?.size ?: 0) + stack.size
+        )
+        previousStack?.fastForEach { item ->
+            val key = keyFor(item)
+            previousKeys?.add(key)
+            itemsByKey[key] = item
+        }
+        stack.fastForEach { item ->
+            val key = keyFor(item)
+            currentKeys.add(key)
+            itemsByKey[key] = item
+        }
+
+        val indexLookup = StackCreationContextIndexLookup(stack, previousStack)
+        val result =
+            LinkedHashMap<Key, Pair<Context, StackCreationContext<ItemType>>>(itemsByKey.size)
+        itemsByKey.forEach { (key, item) ->
+            val isInPrevious = previousKeys?.contains(key) == true
+            val isInCurrent = key in currentKeys
+
+            val intention = when {
+                !isInCurrent -> AppearanceIntention.Removal
+                treatNewEnteringAsPreparing && !isInPrevious -> AppearanceIntention.Entrance
+                else -> AppearanceIntention.Movement
+            }
+
+            val creationContext = StackCreationContext(
+                stackSnapshot = stack,
+                previousSnapshot = previousStack,
+                intention = intention
+            ).apply { installIndexLookup(indexLookup) }
+            result[key] = contextFactory.create(creationContext, item) to creationContext
+        }
+        return result
+    }
+}
+
+private class DelegatingContextResolver<ItemType, Key : Any, Context, CreationContext>(
+    private val currentResolver: () -> ContextResolver<ItemType, Key, Context, CreationContext>,
+) : ContextResolver<ItemType, Key, Context, CreationContext> {
+    override fun keyFor(itemType: ItemType): Key =
+        currentResolver().keyFor(itemType)
+
+    override fun buildContexts(
+        stack: List<ItemType>,
+        previousStack: List<ItemType>?,
+        treatNewEnteringAsPreparing: Boolean,
+        recalculateEnteringToMoving: Boolean,
+        previousContexts: Map<Key, Context>?
+    ): Map<Key, Pair<Context, CreationContext>> = currentResolver().buildContexts(
+        stack,
+        previousStack,
+        treatNewEnteringAsPreparing,
+        recalculateEnteringToMoving,
+        previousContexts
+    )
 }

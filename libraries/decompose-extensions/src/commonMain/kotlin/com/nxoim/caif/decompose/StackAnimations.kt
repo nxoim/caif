@@ -1,5 +1,6 @@
 package com.nxoim.caif.decompose
 
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -12,43 +13,33 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.round
 import com.arkivanov.essenty.backhandler.BackEvent
 import com.nxoim.caif.core.BaseItemAnimation
-import com.nxoim.caif.core.ItemAnimation
 import com.nxoim.caif.core.animateFloat
-import com.nxoim.caif.core.animateInt
 import com.nxoim.caif.core.animateOffset
-import com.nxoim.caif.core.buildSelectableItemAnimation
 import com.nxoim.caif.prefabs.stack.StackItemPosition
 import com.nxoim.caif.prefabs.stack.isTopmost
 import com.nxoim.caif.springs.smooth
 import com.nxoim.caif.springs.springA
 import kotlin.math.roundToInt
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 
-fun updatedCupertinoSlideOffset(
-    current: Offset,
-    delta: Offset,
-): Offset {
-    val factor = if (current.x > 0f) 1f else 0.2f
-    return Offset(current.x + delta.x * factor, 0f)
-}
-
 class CupertinoStackAnimation(
     overlayAlphaPerDepth: Float = CupertinoOverlayAlphaPerDepthDefault,
-    slideSpringDuration: Duration = 320.milliseconds,
+    slideSpec: StackAnimationContext.() -> AnimationSpec<Offset> = {
+        if (position is StackItemPosition.Removed) {
+            smooth(duration = CupertinoSlideDurationDefault * 0.9, visibilityThreshold = Offset.VisibilityThreshold)
+        } else {
+            springA(duration = CupertinoSlideDurationDefault, visibilityThreshold = Offset.VisibilityThreshold)
+        }
+    },
+    overlayAlphaSpec: StackAnimationContext.() -> AnimationSpec<Float> = {
+        springA(duration = CupertinoSlideDurationDefault)
+    },
 ) : BaseItemAnimation<StackAnimationContext>(), SwipeCapability {
-
-    val slide = animateOffset(
-        spec = {
-            if (position is StackItemPosition.Removed) {
-                smooth(duration = slideSpringDuration * 0.9, visibilityThreshold = Offset.VisibilityThreshold)
-            } else {
-                springA(duration = slideSpringDuration, visibilityThreshold = Offset.VisibilityThreshold)
-            }
-        },
+    private val slide = animateOffset(
+        spec = slideSpec,
         stopOnTargetReached = { position is StackItemPosition.Removed },
         value = {
             when (val currentPosition = position) {
@@ -62,8 +53,8 @@ class CupertinoStackAnimation(
         },
     )
 
-    val overlayAlpha = animateFloat(
-        spec = { springA(duration = slideSpringDuration) },
+    private val overlayAlpha = animateFloat(
+        spec = overlayAlphaSpec,
         value = { cupertinoOverlayAlpha(position, overlayAlphaPerDepth) },
     )
 
@@ -99,44 +90,50 @@ class CupertinoStackAnimation(
     }
 }
 
-class MaterialStackAnimation : BaseItemAnimation<StackAnimationContext>(), PredictiveBackCapability {
-    private val springDuration = 300.milliseconds
+class MaterialStackAnimation(
+    horizontalBiasSpec: StackAnimationContext.() -> AnimationSpec<Float> = {
+        smooth(duration = MaterialSpringDurationDefault, visibilityThreshold = 1f / environment.viewportSize.width)
+    },
+    verticalDeltaSpec: StackAnimationContext.() -> AnimationSpec<Float> = {
+        smooth(duration = MaterialSpringDurationDefault, visibilityThreshold = 1f)
+    },
+    scaleSpec: StackAnimationContext.() -> AnimationSpec<Float> = {
+        smooth(duration = MaterialSpringDurationDefault, visibilityThreshold = 1f / environment.viewportSize.width)
+    },
+    alphaSpec: StackAnimationContext.() -> AnimationSpec<Float> = { smooth(duration = MaterialSpringDurationDefault) },
+    overlayAlphaSpec: StackAnimationContext.() -> AnimationSpec<Float> = { smooth(duration = MaterialSpringDurationDefault) },
+) : BaseItemAnimation<StackAnimationContext>(), PredictiveBackCapability {
     private val velocityTracker = VelocityTracker()
     private var trackingStart: TimeMark? = null
     private var previousTouchPosition = Offset.Zero
 
-    val animatedHorizontalBias = animateFloat(
-        spec = { smooth(duration = springDuration, visibilityThreshold = 1f / environment.viewportSize.width) },
+    private val animatedHorizontalBias = animateFloat(
+        spec = horizontalBiasSpec,
         value = { 0f },
     )
 
-    val animatedVerticalDelta = animateFloat(
-        spec = { smooth(duration = springDuration, visibilityThreshold = 1f) },
+    private val animatedVerticalDelta = animateFloat(
+        spec = verticalDeltaSpec,
         value = { 0f },
     )
 
-    val animatedScaleFraction = animateFloat(
-        spec = { smooth(duration = springDuration, visibilityThreshold = 1f / environment.viewportSize.width) },
+    private val animatedScaleFraction = animateFloat(
+        spec = scaleSpec,
         value = { if (position is StackItemPosition.Removed) PredictiveBackScaleAtFullProgress else 1f },
     )
 
-    val animatedAlpha = animateFloat(
-        spec = { smooth(duration = springDuration) },
+    private val animatedAlpha = animateFloat(
+        spec = alphaSpec,
         stopOnTargetReached = { position is StackItemPosition.Removed },
         value = { if (position is StackItemPosition.Removed) 0f else 1f },
     )
 
-    val animatedOverlayAlpha = animateFloat(
-        spec = { smooth(duration = springDuration) },
+    private val animatedOverlayAlpha = animateFloat(
+        spec = overlayAlphaSpec,
         value = { 0f },
     )
 
-    private val topMostMarker = animateInt(
-        spec = { smooth(duration = springDuration) },
-        value = { if (position.isTopmost) 1 else 0 },
-    )
-
-    val isTopmost get() = topMostMarker.value == 1
+    private val isTopmost get() = currentContext?.position?.isTopmost == true
     private var swipeEdge = BackEvent.SwipeEdge.UNKNOWN
     private var currentHorizontalBias = 0f
     private var currentUnderlyingHorizontalBias = 0f
@@ -228,48 +225,17 @@ class MaterialStackAnimation : BaseItemAnimation<StackAnimationContext>(), Predi
     }
 }
 
-fun cupertinoStackAnimation(
-    overlayAlphaPerDepth: Float = CupertinoOverlayAlphaPerDepthDefault,
-    slideSpringDuration: Duration = 320.milliseconds,
-): ItemAnimation<StackAnimationContext> = CupertinoStackAnimation(
-    overlayAlphaPerDepth = overlayAlphaPerDepth,
-    slideSpringDuration = slideSpringDuration,
-)
-
-fun materialStackAnimation(): ItemAnimation<StackAnimationContext> =
-    MaterialStackAnimation()
-
-fun adaptiveStackAnimation(
-    overlayAlphaPerDepth: Float = CupertinoOverlayAlphaPerDepthDefault,
-    slideSpringDuration: Duration = 320.milliseconds,
-): ItemAnimation<StackAnimationContext> = selectableStackAnimation(
-    swipe = {
-        CupertinoStackAnimation(
-            overlayAlphaPerDepth = overlayAlphaPerDepth,
-            slideSpringDuration = slideSpringDuration,
-        )
-    },
-    predictiveBack = {
-        MaterialStackAnimation()
-    },
-)
-
-fun selectableStackAnimation(
-    swipe: () -> ItemAnimation<StackAnimationContext> = { CupertinoStackAnimation() },
-    predictiveBack: () -> ItemAnimation<StackAnimationContext> = { MaterialStackAnimation() },
-): ItemAnimation<StackAnimationContext> = buildSelectableItemAnimation {
-    val swipeSelector = selectOnCapability<SwipeCapability> {
-        swipe()
-    }
-    selectOnCapability<PredictiveBackCapability> {
-        predictiveBack()
-    }
-    defaultSelector(swipeSelector)
+private fun updatedCupertinoSlideOffset(
+    current: Offset,
+    delta: Offset,
+): Offset {
+    val factor = if (current.x > 0f) 1f else 0.2f
+    return Offset(current.x + delta.x * factor, 0f)
 }
 
-fun adaptiveOverlayAlpha(
+private fun cupertinoOverlayAlpha(
     position: StackItemPosition,
-    overlayAlphaPerDepth: Float = AdaptiveOverlayAlphaPerDepthDefault,
+    overlayAlphaPerDepth: Float = CupertinoOverlayAlphaPerDepthDefault,
 ): Float = when (position) {
     StackItemPosition.PreEntered,
     StackItemPosition.Removed -> 0f
@@ -277,11 +243,6 @@ fun adaptiveOverlayAlpha(
     is StackItemPosition.Inside ->
         (position.index * overlayAlphaPerDepth).coerceAtMost(1f)
 }
-
-fun cupertinoOverlayAlpha(
-    position: StackItemPosition,
-    overlayAlphaPerDepth: Float = AdaptiveOverlayAlphaPerDepthDefault,
-): Float = adaptiveOverlayAlpha(position, overlayAlphaPerDepth)
 
 private fun predictiveBackScale(progress: Float): Float =
     1f - (1f - PredictiveBackScaleAtFullProgress) * progress.coerceIn(0f, 1f)
@@ -309,7 +270,9 @@ private fun predictiveBackHorizontalBiasDirection(
 private fun predictiveBackUnderlyingHorizontalBias(): Float =
     -PredictiveBackUnderlyingHorizontalOffset
 
-private const val AdaptiveOverlayAlphaPerDepthDefault = 0.3f
+private val CupertinoSlideDurationDefault = 320.milliseconds
+private val MaterialSpringDurationDefault = 300.milliseconds
+
 private const val CupertinoOverlayAlphaPerDepthDefault = 0.3f
 private const val PredictiveBackScaleAtFullProgress = 0.85f
 private const val PredictiveBackUnderlyingScaleAtFullProgress = 0.90f

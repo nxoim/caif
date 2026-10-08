@@ -25,7 +25,6 @@ import com.arkivanov.decompose.Child.Created
 import com.arkivanov.decompose.router.stack.ChildStack
 import com.arkivanov.decompose.value.Value
 import com.arkivanov.essenty.backhandler.BackHandler
-import com.nxoim.caif.core.ItemAnimation
 import com.nxoim.caif.prefabs.stack.StackAnimatorLayout
 import com.nxoim.caif.prefabs.stack.StackOrder
 import com.nxoim.caif.prefabs.stack.getOrCreateDispatcher
@@ -37,33 +36,14 @@ import com.nxoim.caif.swipeable.swipeable
 fun <Configuration : Any, Child : Any> DecomposeStack(
     stack: Value<ChildStack<Configuration, Child>>,
     onPop: () -> Unit,
-    animations: (Child) -> ItemAnimation<StackAnimationContext>,
     modifier: Modifier = Modifier,
     backHandler: BackHandler? = null,
-    enableGestures: Boolean = true,
-    content: @Composable AnimatedVisibilityScope.(Child) -> Unit,
-) = DecomposeStack(
-    stack = stack,
-    onPop = onPop,
-    modifier = modifier,
-    backHandler = backHandler,
-    animationFactory = rememberDecomposeAnimations(animations),
-    enableGestures = enableGestures,
-    content = content,
-)
-
-@Composable
-fun <Configuration : Any, Child : Any> DecomposeStack(
-    stack: Value<ChildStack<Configuration, Child>>,
-    onPop: () -> Unit,
-    modifier: Modifier = Modifier,
-    backHandler: BackHandler? = null,
-    animationFactory: DecomposeAnimationFactory<Configuration, Child> = remember {
-        DecomposeAnimationFactory()
-    },
+    animationFactory: DecomposeAnimationFactory<Configuration, Child>? = null,
     enableGestures: Boolean = true,
     content: @Composable AnimatedVisibilityScope.(Child) -> Unit,
 ) {
+    val resolvedAnimationFactory = resolveDecomposeAnimationFactory(animationFactory)
+    val fallbackForChildren = resolvedAnimationFactory.fallback ?: LocalDecomposeAnimationFallback.current
     val saveableStateHolder = rememberSaveableStateHolder()
     val stackState = rememberStackItems(stack) { it.items }
 
@@ -74,9 +54,7 @@ fun <Configuration : Any, Child : Any> DecomposeStack(
             stack = stackState,
             stackOrder = StackOrder.TopmostLast,
             keyFor = { it.configuration },
-            factory = { child, _ ->
-                animationFactory.create(child.instance, child.configuration)
-            },
+            factory = resolvedAnimationFactory,
             contextFactory = remember(animationEnvironment) {
                 stackAnimationContextFactory { animationEnvironment.value }
             },
@@ -152,10 +130,9 @@ fun <Configuration : Any, Child : Any> DecomposeStack(
 
             StackAnimatorLayout(animator) { _, child ->
                 saveableStateHolder.SaveableStateProvider(child.key) {
-                    @Suppress("UNCHECKED_CAST")
                     CompositionLocalProvider(
                         LocalParentBackGesture provides swipeGesture,
-                        LocalDecomposeAnimationFactory provides (animationFactory as DecomposeAnimationFactory<Any, Any>),
+                        LocalDecomposeAnimationFallback provides fallbackForChildren,
                     ) {
                         content(child.instance)
                     }

@@ -1,110 +1,70 @@
 package com.nxoim.caif.decompose
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.annotation.RememberInComposition
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.arkivanov.decompose.Child.Created
+import com.nxoim.caif.core.AnimationDeclarations
+import com.nxoim.caif.core.AnimationSelectionStrategy
 import com.nxoim.caif.core.ItemAnimation
 import com.nxoim.caif.core.ItemAnimationFactory
+import com.nxoim.caif.core.buildAnimationFactory
+import com.nxoim.caif.core.fromItem
 
-fun interface DecomposeAnimationFactory<in Configuration : Any, in Child : Any> :
-    ItemAnimationFactory<Child, Configuration, StackAnimationContext> {
+@RememberInComposition
+fun <Configuration : Any, Child : Any> decomposeStackAnimations(
+    swipe: ((Configuration, Child) -> ItemAnimation<StackAnimationContext>)? = null,
+    predictiveBack: ((Configuration, Child) -> ItemAnimation<StackAnimationContext>)? = null,
+    fallback: AnimationDeclarations<StackAnimationContext>.() -> Unit = DefaultDecomposeAnimationFallback,
+    selectionStrategy: AnimationSelectionStrategy<Created<Configuration, Child>> = fromTopmost(),
+): DecomposeAnimationFactory<Configuration, Child> = decomposeStackAnimations(selectionStrategy, fallback) { configuration, child ->
+    if (swipe != null) {
+        val swipeDefinition = onInput<SwipeCapability> { swipe(configuration, child) }
+        defaultAnimation(swipeDefinition)
+    }
 
-    companion object {
-        operator fun <Configuration : Any, Child : Any> invoke(
-            defaultAnimation: () -> ItemAnimation<StackAnimationContext> = { adaptiveStackAnimation() },
-            animationFor: (configuration: Configuration, child: Child) -> ItemAnimation<StackAnimationContext>? = { _, _ ->
-                null
-            },
-        ): DecomposeAnimationFactory<Configuration, Child> =
-            DecomposeAnimationFactory { child, config ->
-                animationFor(config, child) ?: defaultAnimation()
-            }
+    if (predictiveBack != null) {
+        onInput<PredictiveBackCapability> { predictiveBack(configuration, child) }
     }
 }
 
-/**
- * Creates a [DecomposeAnimationFactory] with a default animation for all items.
- */
-fun <Configuration : Any, Child : Any> decomposeAnimations(
-    default: () -> ItemAnimation<StackAnimationContext> = { adaptiveStackAnimation() },
-): DecomposeAnimationFactory<Configuration, Child> =
-    DecomposeAnimationFactory { _, _ -> default() }
+@RememberInComposition
+fun <Configuration : Any, Child : Any> decomposeStackAnimations(
+    selectionStrategy: AnimationSelectionStrategy<Created<Configuration, Child>> = fromTopmost(),
+    fallback: AnimationDeclarations<StackAnimationContext>.() -> Unit = DefaultDecomposeAnimationFallback,
+    declarations: AnimationDeclarations<StackAnimationContext>.(Configuration, Child) -> Unit,
+): DecomposeAnimationFactory<Configuration, Child> = buildAnimationFactory(selectionStrategy, fallback) { entry, _ ->
+    declarations(entry.configuration, entry.instance)
+}
+
+typealias DecomposeAnimationFactory<Configuration, Child> =
+    ItemAnimationFactory<Created<Configuration, Child>, Configuration, StackAnimationContext>
 
 /**
- * Creates an exhaustive [DecomposeAnimationFactory] mapping [Child] to animations.
+ * Snapshots are topmost-last
  */
-fun <Configuration : Any, Child : Any> decomposeAnimations(
-    selector: (Child) -> ItemAnimation<StackAnimationContext>,
-): DecomposeAnimationFactory<Configuration, Child> =
-    DecomposeAnimationFactory { child, _ -> selector(child) }
+@Suppress("UNCHECKED_CAST")
+fun <Item : Any> fromTopmost(): AnimationSelectionStrategy<Item> =
+    TopmostSelection as AnimationSelectionStrategy<Item>
 
-/**
- * Creates an exhaustive [DecomposeAnimationFactory] mapping [Configuration] and [Child] to animations.
- */
-fun <Configuration : Any, Child : Any> decomposeAnimations(
-    selector: (Configuration, Child) -> ItemAnimation<StackAnimationContext>,
-): DecomposeAnimationFactory<Configuration, Child> =
-    DecomposeAnimationFactory { child, config -> selector(config, child) }
+val LocalDecomposeAnimationFallback = staticCompositionLocalOf<AnimationDeclarations<StackAnimationContext>.() -> Unit> {
+    DefaultDecomposeAnimationFallback
+}
 
-/**
- * Creates a [DecomposeAnimationFactory] with a customizable [default] fallback.
- */
-fun <Configuration : Any, Child : Any> decomposeAnimations(
-    default: () -> ItemAnimation<StackAnimationContext>,
-    selector: (Child) -> ItemAnimation<StackAnimationContext>?,
-): DecomposeAnimationFactory<Configuration, Child> =
-    DecomposeAnimationFactory { child, _ ->
-        selector(child) ?: default()
-    }
-
-/**
- * Creates a remembered [DecomposeAnimationFactory] mapping [Child] to animations.
- */
 @Composable
-fun <Configuration : Any, Child : Any> rememberDecomposeAnimations(
-    selector: (Child) -> ItemAnimation<StackAnimationContext>,
+internal fun <Configuration : Any, Child : Any> resolveDecomposeAnimationFactory(
+    explicitFactory: DecomposeAnimationFactory<Configuration, Child>? = null,
 ): DecomposeAnimationFactory<Configuration, Child> {
-    val currentSelector = rememberUpdatedState(selector)
-    return remember {
-        DecomposeAnimationFactory { child, _ ->
-            currentSelector.value(child)
-        }
-    }
+    if (explicitFactory != null) return explicitFactory
+    val fallback = LocalDecomposeAnimationFallback.current
+    return remember(fallback) { decomposeStackAnimations(fallback = fallback) }
 }
 
-/**
- * Creates a remembered [DecomposeAnimationFactory] mapping [Configuration] and [Child] to animations.
- */
-@Composable
-fun <Configuration : Any, Child : Any> rememberDecomposeAnimations(
-    selector: (Configuration, Child) -> ItemAnimation<StackAnimationContext>,
-): DecomposeAnimationFactory<Configuration, Child> {
-    val currentSelector = rememberUpdatedState(selector)
-    return remember {
-        DecomposeAnimationFactory { child, config ->
-            currentSelector.value(config, child)
-        }
-    }
-}
+private val TopmostSelection = fromItem<Any> { it.last() }
 
-/**
- * Creates a remembered [DecomposeAnimationFactory] with a default animation for all items.
- */
-@Composable
-fun <Configuration : Any, Child : Any> rememberDecomposeAnimations(
-    default: () -> ItemAnimation<StackAnimationContext> = { adaptiveStackAnimation() },
-): DecomposeAnimationFactory<Configuration, Child> {
-    val currentDefault = rememberUpdatedState(default)
-    return remember {
-        DecomposeAnimationFactory { _, _ -> currentDefault.value() }
-    }
+private val DefaultDecomposeAnimationFallback: AnimationDeclarations<StackAnimationContext>.() -> Unit = {
+    val swipe = onInput<SwipeCapability> { CupertinoStackAnimation() }
+    onInput<PredictiveBackCapability> { MaterialStackAnimation() }
+    defaultAnimation(swipe)
 }
-
-val LocalDecomposeAnimationFactory = staticCompositionLocalOf<DecomposeAnimationFactory<Any, Any>> {
-    DefaultDecomposeAnimationFactoryInstance
-}
-
-private val DefaultDecomposeAnimationFactoryInstance = DecomposeAnimationFactory<Any, Any>(
-    defaultAnimation = { adaptiveStackAnimation() },
-)

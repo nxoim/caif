@@ -4,6 +4,21 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
 import kotlin.reflect.KClass
 
+@Immutable
+fun interface ItemAnimationFactory<ItemType, in Key : Any, Context> {
+    fun create(item: ItemType, key: Key): ItemAnimation<Context>
+
+    /**
+     * Fallback declarations independent of an item's configuration.
+     */
+    val fallback: (AnimationDeclarations<Context>.() -> Unit)? get() = null
+
+    fun sourceItem(
+        inputCapability: KClass<*>?,
+        stackSnapshot: List<ItemType>
+    ): ItemType? = null
+}
+
 interface ItemAnimation<Context> {
     val modifier: Modifier
 
@@ -15,8 +30,3 @@ interface ItemAnimation<Context> {
 
 inline fun <reified T : Any> ItemAnimation<*>.getAndSelectCapability(): T? =
     getAndSelectCapability(T::class)
-
-@Immutable
-fun interface ItemAnimationFactory<in ItemType, in Key : Any, Context> {
-    fun create(item: ItemType, key: Key): ItemAnimation<Context>
-}
