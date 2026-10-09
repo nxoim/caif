@@ -230,7 +230,10 @@ private class DefaultStackContextResolver<ItemType, Key : Any, Context>(
         recalculateEnteringToMoving: Boolean,
         previousContexts: Map<Key, Context>?
     ): Map<Key, Pair<Context, StackCreationContext<ItemType>>> {
-        val previousKeys = previousStack?.let { MutableScatterSet<Key>(it.size) }
+        val previousKeys = if (treatNewEnteringAsPreparing)
+            previousStack?.let { MutableScatterSet<Key>(it.size) }
+        else
+            null
         val currentKeys = MutableScatterSet<Key>(stack.size)
         val itemsByKey = LinkedHashMap<Key, ItemType>(
             (previousStack?.size ?: 0) + stack.size
@@ -250,12 +253,13 @@ private class DefaultStackContextResolver<ItemType, Key : Any, Context>(
         val result =
             LinkedHashMap<Key, Pair<Context, StackCreationContext<ItemType>>>(itemsByKey.size)
         itemsByKey.forEach { (key, item) ->
-            val isInPrevious = previousKeys?.contains(key) == true
             val isInCurrent = key in currentKeys
 
             val intention = when {
                 !isInCurrent -> AppearanceIntention.Removal
-                treatNewEnteringAsPreparing && !isInPrevious -> AppearanceIntention.Entrance
+                treatNewEnteringAsPreparing && previousKeys?.contains(key) != true ->
+                    AppearanceIntention.Entrance
+
                 else -> AppearanceIntention.Movement
             }
 

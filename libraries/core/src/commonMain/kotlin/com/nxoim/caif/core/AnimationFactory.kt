@@ -89,8 +89,15 @@ class AnimationDeclarations<Context> internal constructor() {
 
     internal fun build(fallback: AnimationDefinitions<Context>? = null): AnimationDefinitions<Context> {
         if (inputs.isEmpty() && default == null && fallback != null) return fallback
+
         return AnimationDefinitions(
-            inputs = if (fallback == null) inputs.toMap() else fallback.inputs + inputs,
+            inputs = if (fallback == null)
+                inputs.toMap()
+            else
+                buildMap(fallback.inputs.size + inputs.size) {
+                    putAll(fallback.inputs)
+                    putAll(inputs)
+                },
             default = requireNotNull(default ?: fallback?.default) {
                 "Declare a default animation for ordinary navigation and unmapped inputs."
             },

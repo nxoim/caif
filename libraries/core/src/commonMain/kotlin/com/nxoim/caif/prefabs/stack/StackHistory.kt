@@ -88,10 +88,9 @@ class ContextHistory<ItemType, Key : Any, Context, CreationContext>(
     private val resolver: ContextResolver<ItemType, Key, Context, CreationContext>
 ) {
     private var state by mutableStateOf(
-        ContextHistoryState<Key, Context, CreationContext>(
+        ContextHistoryState<Key, Context>(
             previous = emptyMap(),
-            current = emptyMap(),
-            creationContexts = emptyMap()
+            current = emptyMap()
         )
     )
 
@@ -120,16 +119,14 @@ class ContextHistory<ItemType, Key : Any, Context, CreationContext>(
         resolvedContexts: Map<Key, Pair<Context, CreationContext>>,
         preserveUnresolvedContexts: Boolean = false
     ) {
-        val previousState = state
-        val previousContexts = previousState.current
+        val previousContexts = state.current
 
         // a second context resolution for the same stack
         // must not discard that item before the orchestrator can settle it
         if (preserveUnresolvedContexts && resolvedContexts.isEmpty()) {
             state = ContextHistoryState(
                 previous = previousContexts,
-                current = previousContexts,
-                creationContexts = previousState.creationContexts
+                current = previousContexts
             )
             return
         }
@@ -137,8 +134,7 @@ class ContextHistory<ItemType, Key : Any, Context, CreationContext>(
         if (resolvedContexts.isEmpty()) {
             state = ContextHistoryState(
                 previous = previousContexts,
-                current = emptyMap(),
-                creationContexts = emptyMap()
+                current = emptyMap()
             )
             return
         }
@@ -149,34 +145,28 @@ class ContextHistory<ItemType, Key : Any, Context, CreationContext>(
             resolvedContexts.size
         }
         val currentContexts = LinkedHashMap<Key, Context>(expectedSize)
-        val creationContexts = LinkedHashMap<Key, CreationContext>(expectedSize)
         resolvedContexts.forEach { (key, resolution) ->
             currentContexts[key] = resolution.first
-            creationContexts[key] = resolution.second
         }
 
         if (preserveUnresolvedContexts) {
             previousContexts.forEach { (key, context) ->
                 if (key !in resolvedContexts) {
                     currentContexts[key] = context
-                    creationContexts[key] = previousState.creationContexts[key]
-                        ?: error("Missing creation context")
                 }
             }
         }
 
         state = ContextHistoryState(
             previous = previousContexts,
-            current = currentContexts,
-            creationContexts = creationContexts
+            current = currentContexts
         )
     }
 }
 
-private class ContextHistoryState<Key : Any, Context, CreationContext>(
+private class ContextHistoryState<Key : Any, Context>(
     val previous: Map<Key, Context>,
-    val current: Map<Key, Context>,
-    val creationContexts: Map<Key, CreationContext>
+    val current: Map<Key, Context>
 )
 
 /**

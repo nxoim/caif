@@ -223,7 +223,9 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
                 val animation = registry.get(key)
                 val previousContext = previousContexts[key]
                 if (animation != null && previousContext != null &&
-                    !animation.willBeVisible(previousContext) && !animation.willBeVisible(currentContext)
+                    !animation.willBeVisible(previousContext) && !animation.willBeVisible(
+                        currentContext
+                    )
                 ) {
                     newAffected.remove(key)
                 }
@@ -234,7 +236,9 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
         // can be removed immediately
         val immediatelyEvicted = MutableScatterSet<Key>().apply {
             cycleState.context.current.keys.forEach { key ->
-                if (key !in currentKeys && key !in newAffected && renderJobs[key]?.isActive != true) add(key)
+                if (key !in currentKeys && key !in newAffected && renderJobs[key]?.isActive != true) add(
+                    key
+                )
             }
         }
 
@@ -252,10 +256,22 @@ class StackOrchestrator<ItemType, Key : Any, Context, CreationContext>(
             registry.evict(key)
             itemCache -= key
         }
-        val hiddenCompletedKeys = renderJobs.filter { (key, job) ->
-            key in cycleState.stack.currentKeys && key !in newAffected && !job.isActive &&
-                settledContexts[key]?.let { registry.get(key)?.willBeVisible(it) == false } == true
-        }.keys
+
+        fun isHiddenCompletedItem(
+            key: Key,
+            job: Job
+        ): Boolean = key in cycleState.stack.currentKeys &&
+                key !in newAffected &&
+                !job.isActive &&
+                settledContexts[key]?.let { context ->
+                    registry.get(key)?.willBeVisible(context) == false
+                } == true
+
+        val hiddenCompletedKeys = buildList(renderJobs.size) {
+            renderJobs.forEach { (key, job) ->
+                if (isHiddenCompletedItem(key, job)) add(key)
+            }
+        }
 
         hiddenCompletedKeys.forEach { key ->
             if (externalAnimations.isRunning(key)) {
